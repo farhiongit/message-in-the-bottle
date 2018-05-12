@@ -126,12 +126,9 @@ main (void)
 
   fprintf (stderr, "Bottle %p drying...\n", (void *) bottle);
   // Therefore, we can close the bottle:
-  // - prevent any new message from being sent in the bottle
-  // - inform all receivers that there won't be any more food sent through the bottle
-  // - wait for the bottle to be emptied.
-  // - ask for all the receivers to stop waiting for food and to finish their job.
-  // This call must be done in the thread (main thread here) that controls the execution of the feeder,
-  // after the feeder has finished its work.
+  // 1. prevents any new message from being sent in the bottle.
+  // 2. waits for the bottle to be emptied by the receivers.
+  // 3. asks for any blocked receivers to stop waiting for food and to finish their job.
   BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (bottle);
   fprintf (stderr, "Bottle %p dry.\n", (void *) bottle);
 

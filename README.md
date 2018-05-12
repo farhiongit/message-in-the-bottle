@@ -108,7 +108,7 @@ It:
 3. asks for any blocked calls to `BOTTLE_DRAIN` (called by the receivers) to stop waiting for food and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
 
-This call *must be done in the thread (main thread here) that controls the execution of the feeders*,
+This call *must be done in the thread that controls the execution of the feeders*,
 after the feeders have finished their work.
 
 Thereafter, once all the receivers are done, the bottle can be destroyed safely with `BOTTLE_DESTROY`.
@@ -116,7 +116,7 @@ Thereafter, once all the receivers are done, the bottle can be destroyed safely 
 Note that `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
 ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
 and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice),
-otherwise, thread some synchronization resources might not be released properly (mutexes and conditions).
+otherwise, some thread resources might not be released properly (mutexes and conditions).
 
 ## Other features
 
