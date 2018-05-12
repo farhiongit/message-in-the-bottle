@@ -32,6 +32,10 @@ To transport messages of type *T*, just create a message queue with:
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `);`
 
+For instance, to create a message queue *b* for exchanging integers between threads, use:
+
+`BOTTLE(int) *b = BOTTLE_CREATE (int);`
+
 The message queue is a strongly typed (yes, it is an hand-made template container) FIFO queue.
 
 The queue is unbuffered by default.
@@ -59,33 +63,33 @@ Sender threads communicate synchronously with receiver threads by exchanging mes
 
 - The receivers can receive messages, as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
-      - `BOTTLE_DRAIN` returns 0 if there is no data to receive and the bottle is
-        closed (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-      - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle (it modifies the value of the second argument *message*) and returns 1.
-      - Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
+    - `BOTTLE_DRAIN` returns 0 if there is no data to receive and the bottle is
+       closed (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle (it modifies the value of the second argument *message*) and returns 1.
+    - Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
         until there is data to receive.
 
-      Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle.
+ Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle.
 
-      Please notice that the second argument *message* is of type *T*, and not a pointer to *T*,
-      even though it might be modified by the callee (macro magic here).
+ Please notice that the second argument *message* is of type *T*, and not a pointer to *T*,
+ even though it might be modified by the callee (macro magic here).
   
 - The senders can send messages by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
   and the botlle is not closed.
 
-      - `BOTTLE_FILL` returns 0 immediately without blocking if the bottle is plugged (`BOTTLE_PLUG`).
-      - `BOTTLE_FILL` returns 0 immediately without blocking if the bottle is closed (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-        This most probably indicates an error in the user program as it should ne avoided to close a bottle
-        while senders are still using it.
-      - Otherwise,
+    - `BOTTLE_FILL` returns 0 immediately without blocking if the bottle is plugged (`BOTTLE_PLUG`).
+    - `BOTTLE_FILL` returns 0 immediately without blocking if the bottle is closed (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    This most probably indicates an error in the user program as it should ne avoided to close a bottle
+    while senders are still using it.
+    - Otherwise,
 
         - If the message queue is unbuffered, `BOTTLE_FILL` blocks until some receiver has received
-        the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
+    the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
         - If it is buffered and the buffer is full, `BOTTLE_FILL` blocks until some receiver has retrieved a value
-        (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
+    (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
         - Otherwise `BOTTLE_FILL` sends the message in the bottle and returns 1.
 
-      Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle.
+  Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle.
 
 ## Closing communication
 
@@ -99,8 +103,8 @@ It:
 
 1. prevents any new message from being sent in the bottle (just in case) :
   `BOTTLE_FILL` and `BOTTLE_TRY_FILL` will return 0 immediately (without blocking). 
-- waits for the bottle to be emptied by calls to `BOTTLE_DRAIN` (called by the receivers).
-- asks for any blocked calls to `BOTTLE_DRAIN` (called by the receivers) to stop waiting for food and to finish their job:
+2. waits for the bottle to be emptied by calls to `BOTTLE_DRAIN` (called by the receivers).
+3. asks for any blocked calls to `BOTTLE_DRAIN` (called by the receivers) to stop waiting for food and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
 
 This call *must be done in the thread (main thread here) that controls the execution of the feeders*,
