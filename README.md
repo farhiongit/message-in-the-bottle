@@ -1,16 +1,17 @@
-Thread-safe message queue for thread synchronisation
+Thread-safe message queue for thread synchronization
 ====================================================
 
 I have recently read about the Go language. I was not really convinced by the concept.
 The minimalistic grammar and overall simplicity (as compared to C++ or Java) are nice feature,
 but the language still needs optimisation and is sometime tricky.
 
-Nevertheless, I noticed the use of the gracious message queue pattern (called channels in Go) for thread (called goroutines) synchronisation.
+Nevertheless, I noticed the use of the gracious message queue pattern (called channels in Go) for
+thread (called goroutines) synchronization.
 
-This pattern is a FIFO thread-safe message queue suited for thread synchronisation.
+This pattern is a FIFO thread-safe message queue suited for thread synchronization.
 
-The pattern of message driven synchronisation is of interest because it is intuitive and of a higher level of abstraction than
-mutexes and conditions:
+The pattern of message driven synchronization is of interest because it is intuitive and of a higher level
+of abstraction than mutexes and conditions:
 
 - some threads `A` fill the message queue
 - some other threads `B` eat up the message queue.
@@ -34,13 +35,13 @@ To transport messages of type *T*, just create a message queue with:
 
 For instance, to create a message queue *b* for exchanging integers between threads, use:
 
-`BOTTLE(int) *b = BOTTLE_CREATE (int);`
+`BOTTLE (int) *b = BOTTLE_CREATE (int);`
 
-The message queue is a strongly typed (yes, it is an hand-made template container) FIFO queue.
+The message queue is a strongly typed (yes, it is a hand-made template container) FIFO queue.
 
 The queue is unbuffered by default.
 
-#### Unbuffered message queue
+#### Buffered message queue
 
 If needed, buffered queues can be used in rare cases (for instance to limit the number of thread workers).
 To create a buffered message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
@@ -111,6 +112,11 @@ This call *must be done in the thread (main thread here) that controls the execu
 after the feeders have finished their work.
 
 Thereafter, once all the receivers are done, the bottle can be destroyed safely with `BOTTLE_DESTROY`.
+
+Note that `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
+ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
+and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice),
+otherwise, thread some synchronization resources might not be released properly (mutexes and conditions).
 
 ## Other features
 
