@@ -30,6 +30,7 @@
 
 #include "vfunc.h"
 #include <pthread.h>
+#include <errno.h>
 
 // To be translated.
 #define TBT(text) (text)
@@ -104,15 +105,16 @@ enum { INFINITE_CAPACITY = 0, UNBUFFERED = 1 };
   ((self)->vtable->TryDrain ((self), &(message)))
 
 #define BOTTLE_PLUG(self)  \
-  do { ASSERT (!pthread_mutex_lock (&(self)->mutex)) ;\
-       (self)->frozen = 1 ;\
-       ASSERT (!pthread_mutex_unlock (&(self)->mutex)) ;\
+  do { ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
+       (self)->frozen = 1 ;                             \
+       ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
      } while(0)
 
 #define BOTTLE_UNPLUG(self)  \
-  do { ASSERT (!pthread_mutex_lock (&(self)->mutex)) ;\
-       (self)->frozen = 0 ;\
-       ASSERT (!pthread_mutex_unlock (&(self)->mutex)) ;\
+  do { ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
+       (self)->frozen = 0 ;                             \
+       ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
+       ASSERT (!pthread_cond_signal (&self->not_full)); \
      } while(0)
 
 #define BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY(self)  \

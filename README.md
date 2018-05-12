@@ -64,9 +64,10 @@ Sender threads communicate synchronously with receiver threads by exchanging mes
 
 - The receivers can receive messages, as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
-    - `BOTTLE_DRAIN` returns 0 if there is no data to receive and the bottle is
-       closed (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-    - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle (it modifies the value of the second argument *message*) and returns 1.
+    - `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
+       closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle
+      (it modifies the value of the second argument *message*) and returns 1.
     - Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
         until there is data to receive.
 
@@ -78,17 +79,23 @@ Sender threads communicate synchronously with receiver threads by exchanging mes
 - The senders can send messages by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
   and the botlle is not closed.
 
-    - `BOTTLE_FILL` returns 0 immediately without blocking if the bottle is plugged (`BOTTLE_PLUG`).
-    - `BOTTLE_FILL` returns 0 immediately without blocking if the bottle is closed (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-    This most probably indicates an error in the user program as it should ne avoided to close a bottle
-    while senders are still using it.
-    - Otherwise,
+    - `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
+        - immediately without blocking if the bottle was closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+        - after unblocking immediately when the bottle is closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+
+    This most probably indicates an error in the user program as it should be avoided to close a bottle
+    while senders are still using it.
+
+    - `BOTTLE_FILL` blocks in those cases:
+
+        - If the bottle was plugged (by `BOTTLE_PLUG`).
         - If the message queue is unbuffered, `BOTTLE_FILL` blocks until some receiver has received
     the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
         - If it is buffered and the buffer is full, `BOTTLE_FILL` blocks until some receiver has retrieved a value
     (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
-        - Otherwise `BOTTLE_FILL` sends the message in the bottle and returns 1.
+
+    - In other cases, `BOTTLE_FILL` sends the message in the bottle and returns 1.
 
   Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle.
 
@@ -130,13 +137,19 @@ When used, the message queue looses its thread-synchronization feature and
 behaves like a simple thread-safe FIFO message queue:
 
 - Receivers can receive messages without blocking with `BOTTLE_TRY_DRAIN (`*bottle*`, `*message*`)`.
-`BOTTLE_TRY_DRAIN` returns 0 if the bottle is empty.
-Otherwise, it receives a *message* (it modifies the value of the second argument *message*) from the bottle and returns 1.
-- Senders can send messages without blocking with `BOTTLE_TRY_FILL (`*bottle*`, `*message*`)`.
-`BOTTLE_TRY_FILL` returns 0 if the bottle is plugged, closed or already full.
-Otherwise, it sends a *message* in the bottle and returns 1.
 
-Those two functions also return 0 if the bottle is already closed (most probably indicating an error in the user program.)
+    - `BOTTLE_TRY_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if the bottle is empty and closed.
+    - `BOTTLE_TRY_DRAIN` returns 0 (with `errno` set to `EWOULDBLOCK`) if the bottle is empty.
+    - Otherwise, it receives a *message* (it modifies the value of the second argument *message*)
+      from the bottle and returns 1.
+
+- Senders can send messages without blocking with `BOTTLE_TRY_FILL (`*bottle*`, `*message*`)`.
+
+    - `BOTTLE_TRY_FILL` returns 0 if the bottle is closed (with `errno` is set `ECONNABORTED`).
+    This most probably indicates an error in the user program as it should be avoided to close a bottle
+    while senders are still using it.
+    - Otherwise, `BOTTLE_TRY_FILL` returns 0 if the bottle is plugged (with `errno` is set `EWOULDBLOCK`) or already full.
+    - Otherwise, it sends a *message* in the bottle and returns 1.
 
 Notice that the second argument *message* is of type *T*, and not a pointer to *T*,
 even though it might be modified by `BOTTLE_TRY_DRAIN` (macro magic here).

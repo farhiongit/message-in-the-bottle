@@ -28,16 +28,50 @@ process_message (Point p)
   return 1;
 }
 
+// Stopper thread
+static void *
+stop (void *arg)
+{
+  sleep (2);
+  BOTTLE (Point) * bottle = arg;
+  BOTTLE_PLUG (bottle);
+  fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p PLUGGED.\n", pthread_self (), (void *) bottle);
+  return 0;
+}
+
+// Starter thread
+static void *
+restart (void *arg)
+{
+  sleep (5);
+  BOTTLE (Point) * bottle = arg;
+  BOTTLE_UNPLUG (bottle);
+  fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p UNPLUGGED.\n", pthread_self (), (void *) bottle);
+  return 0;
+}
+
+// Closer thread
+static void *
+close_bottle (void *arg)
+{
+  sleep (7);
+  BOTTLE (Point) * bottle = arg;
+  fprintf (stderr, "Closer thread %1$#lx: bottle %2$p CLOSING...\n", pthread_self (), (void *) bottle);
+  BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (bottle);
+  fprintf (stderr, "Closer thread %1$#lx: bottle %2$p CLOSED.\n", pthread_self (), (void *) bottle);
+  return 0;
+}
+
 // Feeder thread
 static void *
 feed (void *arg)
 {
   const char fmt[] = "(%g, %g)";
   BOTTLE (Point) * bottle = arg;
-  for (unsigned int i = 1; i <= 10; i++)
+  for (unsigned int i = 1; i <= 26; i++)
   {
     Point p;
-    p.x = 5 * i;
+    p.x = i;
     p.y = 7 * i;
     int size = snprintf (0, 0, fmt, p.x, p.y);
 
@@ -46,10 +80,16 @@ feed (void *arg)
     snprintf (p.s, size + 1, fmt, p.x, p.y);
     char *scpy = strdup (p.s);
 
-    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- ? ...\n", pthread_self (), (void *) bottle);
+    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" } ?\n",
+             pthread_self (), (void *) bottle, p.x, p.y, scpy);
     if (!BOTTLE_FILL (bottle, p))       // bottle <- message p
+    {
+      if (errno == ECONNABORTED)
+        fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p WAS CLOSED.\n", pthread_self (), (void *) bottle);
       free (p.s);
-    // From here, p could be drained from the bottle by an eater thread, and ressources of p released.
+    }
+    // From here, p has been sent in the bottle and is not owned by the thread anymore:
+    // it could be drained from the bottle by an eater thread, and ressources of p released.
     // Ressources of p should not be used once feeded, if not by an eater: scpy is used instead.
     else
       fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" }.\n",
@@ -85,7 +125,11 @@ eat (void *arg)
       free (p.s);
     }
     else
+    {
+      if (errno == ECONNABORTED)
+        fprintf (stderr, "Eater thread %1$#lx: bottle %2$p WAS CLOSED.\n", pthread_self (), (void *) bottle);
       break;
+    }
   }
 
   fprintf (stderr, "Eater thread %1$#lx finished.\n", pthread_self ());
@@ -118,6 +162,18 @@ main (void)
   pthread_t feeder;
   if (!pthread_create (&feeder, 0, feed, bottle))       // Pass the bottle as an argument of the feeder.
     fprintf (stderr, "Feeder thread %#lx started.\n", feeder);
+
+  pthread_t stopper;
+  if (!pthread_create (&stopper, 0, stop, bottle))      // Pass the bottle as an argument.
+    fprintf (stderr, "Stopper thread %#lx started.\n", stopper);
+
+  pthread_t starter;
+  if (!pthread_create (&starter, 0, restart, bottle))   // Pass the bottle as an argument.
+    fprintf (stderr, "Starter thread %#lx started.\n", starter);
+
+  pthread_t closer;
+  if (!pthread_create (&closer, 0, close_bottle, bottle))       // Pass the bottle as an argument.
+    fprintf (stderr, "Closer thread %#lx started.\n", closer);
 
   // Wait for all messages to be fed through the bottle.
   pthread_join (feeder, 0);

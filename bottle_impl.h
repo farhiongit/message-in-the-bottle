@@ -111,11 +111,22 @@
   {                                                            \
     int ret = 0;                                               \
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
-    if (self->closed || self->frozen)                          \
-      return ret;                                              \
-    while (self->capacity && self->queue.size >= self->capacity)   \
-      ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex)); \
-    if (!self->capacity || self->queue.size < self->capacity)  \
+    if (self->closed)                                          \
+    {                                                          \
+      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      return errno = ECONNABORTED, ret;                        \
+    }                                                          \
+    while (!self->closed &&                                    \
+           (self->frozen ||                                    \
+            (self->capacity && self->queue.size >= self->capacity))) \
+      ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex));   \
+    if (self->closed)                                          \
+    {                                                          \
+      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      return errno = ECONNABORTED, ret;                        \
+    }                                                          \
+    if (!self->frozen &&                                       \
+        (!self->capacity || self->queue.size < self->capacity))\
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
       DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, self->queue.size)); \
@@ -130,8 +141,16 @@
   {                                                            \
     int ret = 0;                                               \
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
-    if (self->closed || self->frozen)                          \
-      return ret;                                              \
+    if (self->closed)                                          \
+    {                                                          \
+      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      return errno = ECONNABORTED, ret;                        \
+    }                                                          \
+    if (self->frozen)                                          \
+    {                                                          \
+      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      return errno = EWOULDBLOCK, ret;                         \
+    }                                                          \
     if (!self->capacity || self->queue.size < self->capacity)  \
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
@@ -139,6 +158,8 @@
       ASSERT (!pthread_cond_signal (&self->not_empty));        \
       ret = 1;                                                 \
     }                                                          \
+    else                                                       \
+      errno = EWOULDBLOCK;                                     \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     return ret;                                                \
   }                                                            \
@@ -156,6 +177,8 @@
       ASSERT (!pthread_cond_signal (&self->not_full));         \
       ret = 1;                                                 \
     }                                                          \
+    else if (self->closed)                                     \
+      errno = ECONNABORTED;                                    \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     return ret;                                                \
   }                                                            \
@@ -171,6 +194,10 @@
       ASSERT (!pthread_cond_signal (&self->not_full));         \
       ret = 1;                                                 \
     }                                                          \
+    else if (self->closed)                                     \
+      errno = ECONNABORTED;                                    \
+    else                                                       \
+      errno = EWOULDBLOCK;                                     \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     return ret;                                                \
   }                                                            \
