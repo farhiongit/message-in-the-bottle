@@ -62,42 +62,46 @@ Once unneeded, the message queue will later be detroyed by `BOTTLE_DESTROY`.
 Sender threads communicate synchronously with receiver threads by exchanging messages through the bottle
 (the bottle has a mouth where it can be filled with messages and a tap from where it can be drained.)
 
-- The receivers can receive messages, as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
+### Receiving messages
 
-    - `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
+The receivers can receive messages, as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
+
+- `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
        closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-    - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle
+- If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle
       (it modifies the value of the second argument *message*) and returns 1.
-    - Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
+- Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
         until there is data to receive.
 
- Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle.
+Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle.
 
- Please notice that the second argument *message* is of type *T*, and not a pointer to *T*,
- even though it might be modified by the callee (macro magic here).
+Please notice that the second argument *message* is of type *T*, and not a pointer to *T*,
+even though it might be modified by the callee (macro magic here).
+
+### Sending messages
   
-- The senders can send messages by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
-  and the botlle is not closed.
+The senders can send messages by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
+and the botlle is not closed.
 
-    - `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
+- `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
-        - immediately without blocking if the bottle was closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-        - after unblocking immediately when the bottle is closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    - immediately without blocking if the bottle was closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    - after unblocking immediately when the bottle is closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
 
-    This most probably indicates an error in the user program as it should be avoided to close a bottle
-    while senders are still using it.
+      This most probably indicates an error in the user program as it should be avoided to close a bottle
+      while senders are still using it.
 
-    - `BOTTLE_FILL` blocks in those cases:
+- `BOTTLE_FILL` blocks in those cases:
 
-        - If the bottle was plugged (by `BOTTLE_PLUG`).
-        - If the message queue is unbuffered, `BOTTLE_FILL` blocks until some receiver has received
+    - If the bottle was plugged (by `BOTTLE_PLUG`).
+    - If the message queue is unbuffered, `BOTTLE_FILL` blocks until some receiver has received
     the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
         - If it is buffered and the buffer is full, `BOTTLE_FILL` blocks until some receiver has retrieved a value
     (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
 
-    - In other cases, `BOTTLE_FILL` sends the message in the bottle and returns 1.
+- In other cases, `BOTTLE_FILL` sends the message in the bottle and returns 1.
 
-  Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle.
+Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle.
 
 ## Closing communication
 
