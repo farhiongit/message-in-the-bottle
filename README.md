@@ -59,12 +59,16 @@ Once unneeded, the message queue will later be detroyed by `BOTTLE_DESTROY`.
 
 ## Exchanging messages between thread
 
-Sender threads communicate synchronously with receiver threads by exchanging messages through the bottle
-(the bottle has a mouth where it can be filled with messages and a tap from where it can be drained.)
+Sender threads communicate synchronously with receiver threads by exchanging messages through the bottle:
+the bottle has a mouth where it can be filled with messages and a tap from where it can be drained.
+
+![alt text](Bottle.jpg "A classy FIFO message queue")
+
+<small>(c) Davis & Waddell - EcoGlass Oil Bottle with Tap Large 5 Litre | Peter's of Kensington</small>
 
 ### Receiving messages
 
-The receivers can receive messages, as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
+The receivers can receive messages (drainig form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
 - `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
        closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
@@ -80,7 +84,8 @@ even though it might be modified by the callee (macro magic here).
 
 ### Sending messages
   
-The senders can send messages by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
+The senders can send messages (filling in through the mouth of the bottle)
+by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
 and the botlle is not closed.
 
 - `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
