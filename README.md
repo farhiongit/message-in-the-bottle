@@ -57,7 +57,7 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
 
 Once unneeded, the message queue will later be detroyed by `BOTTLE_DESTROY`.
 
-## Exchanging synchronized messages
+## Exchanging messages between thread
 
 Sender threads communicate synchronously with receiver threads by exchanging messages through the bottle
 (the bottle has a mouth where it can be filled with messages and a tap from where it can be drained.)
@@ -102,6 +102,23 @@ and the botlle is not closed.
 - In other cases, `BOTTLE_FILL` sends the message in the bottle and returns 1.
 
 Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle.
+
+### Resources management
+
+In case the message type *T* would be or would contain (in a structure) allocated resources
+(such as memory with `malloc`/`free` or file descriptor with `fopen`/`fclose` for instance),
+the user program must respect those simple rules:
+
+- The **sender**:
+
+    - *must* allocate resources of the message before sending it
+      (i.e. before the call to functions `BOTTLE_FILL` or `BOTTLE_TRY_FILL`);
+    - *should not* access those allocated ressources after the message has been sent. Indeed, from this point,
+      the message is owned by the receiver (which could modify it) and does not belong to the sender anymore.
+
+- The **receiver** *must*, after receiving a message
+  (i.e. after the call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`),
+  deallocate, after use, all the resources of the message (those previously allocated by the sender).
 
 ## Closing communication
 
