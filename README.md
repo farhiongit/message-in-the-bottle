@@ -150,14 +150,13 @@ The user program *must* wait for all the eaters to be finished before going on.
 
 ## Destruction of a bottle
 
-Thereafter, once *all the receivers are done* in the user program, the bottle can be destroyed safely with `BOTTLE_DESTROY`.
+Thereafter, once *all the receivers are done* in the user program, and the bottle is not needed anymore,
+it can be destroyed safely with `BOTTLE_DESTROY`.
 
 Note that `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
 ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
 and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice),
 otherwise, some thread resources might not be released properly (mutexes and conditions).
-
-Once unneeded, the message queue will later be detroyed by `BOTTLE_DESTROY`.
 
 ## Other features
 
@@ -179,10 +178,11 @@ behaves like a simple thread-safe FIFO message queue:
 
 - Senders can send messages without blocking with `BOTTLE_TRY_FILL (`*bottle*`, `*message*`)`.
 
-    - `BOTTLE_TRY_FILL` returns 0 if the bottle is closed (with `errno` is set `ECONNABORTED`).
+    - `BOTTLE_TRY_FILL` returns 0 if the bottle is closed (with `errno` set `ECONNABORTED`).
     This most probably indicates an error in the user program as it should be avoided to close a bottle
     while senders are still using it.
-    - Otherwise, `BOTTLE_TRY_FILL` returns 0 if the bottle is plugged (with `errno` is set `EWOULDBLOCK`) or already full.
+    - Otherwise, `BOTTLE_TRY_FILL` returns 0 if the bottle is plugged (with `errno` set `EWOULDBLOCK`) or already full.
+    This indicates that a call to `BOTTLE_FILL` would have blocked.
     - Otherwise, it sends a *message* in the bottle and returns 1.
 
 Notice that the second argument *message* is of type *T*, and not a pointer to *T*,
@@ -199,7 +199,7 @@ The mouth of the bottle can be:
 
 # Example
 
-All sources should be compiled with the option `-pthreads`.
+All sources should be compiled with the option `-pthread`.
 
 ## Simple example
 
