@@ -31,6 +31,7 @@
 #include "vfunc.h"
 #include <pthread.h>
 #include <errno.h>
+#include <stdio.h>
 
 // To be translated.
 #define TBT(text) (text)

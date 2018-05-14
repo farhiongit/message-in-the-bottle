@@ -25,9 +25,7 @@ And here it is.
 
 # Insights of the user interface
 
-## Creation and destruction of a bottle
-
-### Creation
+## Creation of a bottle
 
 To transport messages of type *T*, just create a message queue with:
 
@@ -41,7 +39,7 @@ The message queue is a strongly typed (yes, it is a hand-made template container
 
 The queue is unbuffered by default.
 
-#### Buffered message queue
+### Buffered message queue
 
 If needed, buffered queues can be used in rare cases (for instance to limit the number of thread workers).
 To create a buffered message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
@@ -52,10 +50,6 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
 - A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
 
 *The usage of buffered queues is usually not necessary and should be avoided.*
-
-### Destruction
-
-Once unneeded, the message queue will later be detroyed by `BOTTLE_DESTROY`.
 
 ## Exchanging messages between thread
 
@@ -72,6 +66,10 @@ The receivers can receive messages (drainig form the tap), as long as the bottle
 
 - `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
        closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+
+    This condition (returned value equal to 0 and `errno` equal to `ECONNABORTED`) should be handled
+    by the eaters and stop the reception of any data from the bottle.
+
 - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle
       (it modifies the value of the second argument *message*) and returns 1.
 - Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
@@ -96,12 +94,15 @@ and the botlle is not closed.
       This most probably indicates an error in the user program as it should be avoided to close a bottle
       while senders are still using it.
 
+      Anyhow, this condition (returned value equal to 0 and `errno` equal to `ECONNABORTED`) should be handled
+      by the feeders and stop the transmission of any data to the bottle.
+
 - `BOTTLE_FILL` blocks in those cases:
 
     - If the bottle was plugged (by `BOTTLE_PLUG`).
     - If the message queue is unbuffered, `BOTTLE_FILL` blocks until some receiver has received
     the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
-        - If it is buffered and the buffer is full, `BOTTLE_FILL` blocks until some receiver has retrieved a value
+    - If it is buffered and the buffer is full, `BOTTLE_FILL` blocks until some receiver has retrieved a value
     (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
 
 - In other cases, `BOTTLE_FILL` sends the message in the bottle and returns 1.
@@ -144,12 +145,19 @@ It:
 This call *must be done in the thread that controls the execution of the feeders*,
 after the feeders have finished their work.
 
-Thereafter, once all the receivers are done, the bottle can be destroyed safely with `BOTTLE_DESTROY`.
+After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters will still process the remaining messages in the bottle.
+The user program *must* wait for all the eaters to be finished before going on.
+
+## Destruction of a bottle
+
+Thereafter, once *all the receivers are done* in the user program, the bottle can be destroyed safely with `BOTTLE_DESTROY`.
 
 Note that `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
 ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
 and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice),
 otherwise, some thread resources might not be released properly (mutexes and conditions).
+
+Once unneeded, the message queue will later be detroyed by `BOTTLE_DESTROY`.
 
 ## Other features
 
@@ -190,6 +198,59 @@ The mouth of the bottle can be:
 - unplugged (to restart communication) with `BOTTLE_UNPLUG`.
 
 # Example
+
+All sources should be compiled with the option `-pthreads`.
+
+## Simple example
+
+The source below is an example of the standard use of the API.
+
+```c
+#include <unistd.h>
+#include <stdio.h>
+
+#include "bottle_impl.h"
+typedef const char *cstring;
+DECLARE_BOTTLE (cstring)
+DEFINE_BOTTLE (cstring)
+
+static void *
+eat (void *arg)
+{
+  cstring s;
+  BOTTLE (cstring) * bottle = arg;
+  while (BOTTLE_DRAIN (bottle, s))
+    printf ("%s\n", s);
+  return 0;
+}
+
+int
+main (void)
+{
+  BOTTLE (cstring) * bottle = BOTTLE_CREATE (cstring);
+
+  pthread_t eater;
+  pthread_create (&eater, 0, eat, bottle);
+
+  cstring police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
+  for (size_t i = 0; i < 2 * sizeof (police) / sizeof (*police); i++)
+    BOTTLE_FILL (bottle, police[i / 2]), sleep (1);
+
+  BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (bottle);
+
+  pthread_join (eater, 0);
+
+  BOTTLE_DESTROY (bottle);
+}
+```
+
+Remarks:
+
+- The sending loop is in the main thread (the one creating the bottle) inside which the bottle can not be closed. This keeps things easier.
+- The eater is one thread, which pace is synchronized with the transmiter. That's what it's all about: synchonizing threads with messages !
+- The program closes the bottle and waits for the eater thread to finish before destroying the bottle.
+
+## Advanced example
 
 `bottle_example.c` is a complete example of a program (compile with option `-pthread`)
 using a synchronized thread-safe FIFO message queue.

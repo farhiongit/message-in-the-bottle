@@ -82,6 +82,7 @@ feed (void *arg)
 
     fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" } ?\n",
              pthread_self (), (void *) bottle, p.x, p.y, scpy);
+    errno = 0;
     if (!BOTTLE_FILL (bottle, p))       // bottle <- message p
     {
       if (errno == ECONNABORTED)
@@ -111,6 +112,7 @@ eat (void *arg)
   {
     fprintf (stderr, "Eater thread %1$#lx: ? <- bottle %2$p...\n", pthread_self (), (void *) bottle);
     Point p;
+    errno = 0;
     if (BOTTLE_DRAIN (bottle, p))       // message p <- bottle
     {
       fprintf (stderr, "Eater thread %1$#lx: { (%3$g, %4$g), \"%5$s\" } <- bottle %2$p.\n",
