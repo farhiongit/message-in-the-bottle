@@ -210,45 +210,49 @@ The source below is an example of the standard use of the API.
 #include <stdio.h>
 
 #include "bottle_impl.h"
-typedef const char *cstring;
-DECLARE_BOTTLE (cstring)
-DEFINE_BOTTLE (cstring)
+typedef const char * Message;
+DECLARE_BOTTLE (Message)
+DEFINE_BOTTLE (Message)
 
 static void *
 eat (void *arg)
 {
-  cstring s;
-  BOTTLE (cstring) * bottle = arg;
-  while (BOTTLE_DRAIN (bottle, s))
-    printf ("%s\n", s);
+  Message m;
+  BOTTLE (Message) * bottle = arg;
+  while (BOTTLE_DRAIN (bottle, m))
+    printf ("%s\n", m);
   return 0;
 }
 
 int
 main (void)
 {
-  BOTTLE (cstring) * bottle = BOTTLE_CREATE (cstring);
+  BOTTLE (Message) * bottle = BOTTLE_CREATE (Message);
 
   pthread_t eater;
   pthread_create (&eater, 0, eat, bottle);
 
-  cstring police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
+  Message police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
   for (size_t i = 0; i < 2 * sizeof (police) / sizeof (*police); i++)
     BOTTLE_FILL (bottle, police[i / 2]), sleep (1);
 
   BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (bottle);
-
   pthread_join (eater, 0);
-
   BOTTLE_DESTROY (bottle);
 }
 ```
 
-Remarks:
+Comments:
 
-- The sending loop is in the main thread (the one creating the bottle) inside which the bottle can not be closed. This keeps things easier.
-- The eater is one thread, which pace is synchronized with the transmiter. That's what it's all about: synchonizing threads with messages !
-- The program closes the bottle and waits for the eater thread to finish before destroying the bottle.
+- A bottle is created (`BOTTLE_CREATE`) to communicate synchronously between two threads, a transmitter and a receiver:
+  it is a template container which type is `BOTTLE (Message)`, where `Message` is a user-deined type.
+- The `eat` function (the receiver which calls `BOTTLE_DRAIN`) is in one thread `eater` (but there could be several), which pace is synchronized with the transmitter.
+  That's what it's all about: synchonizing threads with messages !
+- The sending loop (the transmitter which calls `BOTTLE_FILL`) is in the same thread (here the `main` thread) as the one which has created the bottle.
+  This protects against the bottle being closed during the transmission phase. This is a good practice as it helps keep things easier.
+- The program closes the bottle (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`)
+  and waits for the eater thread to finish (`pthread_join (eater, 0)`)
+  before destroying the bottle (`BOTTLE_DESTROY`).
 
 ## Advanced example
 
