@@ -128,25 +128,28 @@ the user program must respect those simple rules:
 
 ## Closing communication
 
-When any more messages are sent in the bottle,
+When no other messages are sent in the bottle,
 receivers must be informed it is not necessary to block and wait for messages anymore.
 
 As the bottle won't be filled any more, we can close the bottle:
-
-The function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will unblock all receivers and wait for the bottle to be empty.
+the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will seal the mouth of the bottle (i.e. close the transmitter side of the bottle),
+unblock all receivers and wait for the bottle to be empty.
 It:
 
 1. prevents any new message from being sent in the bottle (just in case) :
   `BOTTLE_FILL` and `BOTTLE_TRY_FILL` will return 0 immediately (without blocking). 
-2. waits for the bottle to be emptied by calls to `BOTTLE_DRAIN` (called by the receivers).
-3. asks for any blocked calls to `BOTTLE_DRAIN` (called by the receivers) to stop waiting for food and to finish their job:
+2. waits for the bottle to be emptied (by the calls to `BOTTLE_DRAIN` in the receivers).
+3. asks for any blocked `BOTTLE_DRAIN` calls (called by the receivers) to unblock and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
 
-This call *must be done in the thread that controls the execution of the feeders*,
-after the feeders have finished their work.
+Therefore, the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` *must be done*
 
-After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters will still process the remaining messages in the bottle.
-The user program *must* wait for all the eaters to be finished before going on.
+- after the feeders have finished their work: either at the end of the feeder treatment, or sequentially just after the feeder treatment.
+- before the eaters have finished their work: either sequentially before the eater treatment (but this requires an unlimited buffered bottle),
+  or before the end of the feeder treatment.
+
+After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters will still be able to process the remaining messages in the bottle.
+The user program *must* wait for all the eaters to be finished before destroying the bottle.
 
 ## Destruction of a bottle
 
