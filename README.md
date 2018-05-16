@@ -37,19 +37,34 @@ For instance, to create a message queue *b* for exchanging integers between thre
 
 The message queue is a strongly typed (yes, it is a hand-made template container) FIFO queue.
 
-The queue is unbuffered by default.
+### Unbuffered message queue
+
+The created queue is unbuffered by default.
+Such an unbuffered queue is suitable to synchronize threads running concurrently.
 
 ### Buffered message queue
 
-If needed, buffered queues can be used in rare cases (for instance to limit the number of thread workers).
+If needed, buffered queues can be used in some cases (for instance to limit the number of thread workers).
 To create a buffered message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `, ` *capacity* `);`
 
-- A *capacity* set to `INFINITE_CAPACITY` defines a buffered queue of inifinite capacity.
+- A *capacity* set to a positive integer defines a buffered queue of limited capacity.
+
+    This could be used to manage tokens: *capacity* is then the number of available tokens.
+    Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_DRAIN` to release a token.
+    `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
+
+- A *capacity* set to `UNLIMITED` defines a buffered queue of unlimited capacity (only limited by system resources).
+
+    This could useful to exchange data between unsynchronized (concurrent or sequential) treatments,
+    some writing (with `BOTTLE_TRY_FILL`), other reading (with `BOTTLE_TRY_DRAIN`).
+    The bottle is then used as a trivial thread-safe FIFO queue.
+    `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
+
 - A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
 
-*The usage of buffered queues is usually not necessary and should be avoided.*
+*The usage of buffered queues is neither required nor recommended for thread synchronization.*
 
 ## Exchanging messages between thread
 
@@ -128,8 +143,8 @@ the user program must respect those simple rules:
 
 ## Closing communication
 
-When no other messages are sent in the bottle,
-receivers must be informed it is not necessary to block and wait for messages anymore.
+When concurrent threads are synchronized by an exchange of messages, the transmitter must informs receivers
+when it has finished sending messages, so that receivers won't need to wait for extra messages.
 
 As the bottle won't be filled any more, we can close the bottle:
 the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will seal the mouth of the bottle (i.e. close the transmitter side of the bottle),
@@ -142,14 +157,18 @@ It:
 3. asks for any blocked `BOTTLE_DRAIN` calls (called by the receivers) to unblock and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
 
+`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` acts as if it was sending an end-of-file in the bottle.
 Therefore, the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` *must be done*
+after the feeders have finished their work: either at the end of the feeder treatment,
+or sequentially just after the feeder treatment.
 
-- after the feeders have finished their work: either at the end of the feeder treatment, or sequentially just after the feeder treatment.
-- before the eaters have finished their work: either sequentially before the eater treatment (but this requires an unlimited buffered bottle),
-  or before the end of the feeder treatment.
+After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters are still able to and *must* process the remaining messages
+in the bottle.
 
-After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters will still be able to process the remaining messages in the bottle.
 The user program *must* wait for all the eaters to be finished before destroying the bottle.
+
+As said above, `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` is *only useful when the bottle is used to synchronize concurrent
+threads* and need not be used in other cases (thread-safe shared FIFO queue).
 
 ## Destruction of a bottle
 

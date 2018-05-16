@@ -45,7 +45,7 @@
     }\
   } while(0)
 
-enum { INFINITE_CAPACITY = 0, UNBUFFERED = 1 };
+enum { UNLIMITED = 0, UNBUFFERED = 1 };
 
 #define DECLARE_BOTTLE( TYPE )     \
 \

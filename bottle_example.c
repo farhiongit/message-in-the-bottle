@@ -145,7 +145,7 @@ main (void)
   ASSERT (bottle);
   switch (BOTTLE_CAPACITY (bottle))
   {
-    case INFINITE_CAPACITY:
+    case UNLIMITED:
       fprintf (stderr, "Bottle %1$p created (buffered with infinite capacity).\n", (void *) bottle);
       break;
     case UNBUFFERED:
