@@ -52,7 +52,7 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
 - A *capacity* set to a positive integer defines a buffered queue of limited capacity.
 
     This could be used to manage tokens: *capacity* is then the number of available tokens.
-    Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_DRAIN` to release a token.
+    Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_TRY_DRAIN` to release a token.
     `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
 
 - A *capacity* set to `UNLIMITED` defines a buffered queue of unlimited capacity (only limited by system resources).
@@ -182,6 +182,13 @@ otherwise, some thread resources might not be released properly (mutexes and con
 
 ## Other features
 
+### Hidden data
+
+If the content of the messages is not needed, the argument *message* can be *omitted* in calls to
+`BOTTLE_TRY_DRAIN`, `BOTTLE_DRAIN`, `BOTTLE_TRY_FILL` and `BOTTLE_FILL`.
+
+In this case, a bottle is simply used as a synchronization method or a token counter.
+
 ### Unblocking message queue functions
 
 There are also unblocking versions of the filling and drainig functions.
@@ -219,13 +226,13 @@ The mouth of the bottle can be:
 - plugged (stopping communication) with `BOTTLE_PLUG`,
 - unplugged (to restart communication) with `BOTTLE_UNPLUG`.
 
-# Example
+# Examples
 
 All sources should be compiled with the option `-pthread`.
 
-## Simple example
+## Thread synchronization
 
-The source below is an example of the standard use of the API.
+The source below is a simple example of the standard use of the API for thread synchronization.
 
 ```c
 #include <unistd.h>
@@ -275,6 +282,47 @@ Comments:
 - The program closes the bottle (`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`)
   and waits for the eater thread to finish (`pthread_join (eater, 0)`)
   before destroying the bottle (`BOTTLE_DESTROY`).
+
+## Token management
+
+Tokens can be managed with a buffered bottle:
+
+```c
+#include <stdio.h>
+#include "bottle_impl.h"
+typedef int Token;
+DECLARE_BOTTLE (Token)
+DEFINE_BOTTLE (Token)
+
+int main (void)
+{
+  BOTTLE (Token) * tokens = BOTTLE_CREATE (Token, 3);
+
+  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+
+  printf ("Token released:  %s.\n", BOTTLE_TRY_DRAIN (tokens) ? "OK" : "NOK");
+
+  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+}
+```
+
+displays:
+
+```
+Token requested: OK.
+Token requested: OK.
+Token requested: OK.
+Token requested: NOK.
+Token requested: NOK.
+Token released:  OK.
+Token requested: OK.
+```
+
+Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
 ## Advanced example
 

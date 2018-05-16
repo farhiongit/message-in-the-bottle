@@ -43,6 +43,7 @@
   static int  BOTTLE_TRY_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message);   \
   static void BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY_##TYPE (BOTTLE_##TYPE *self); \
   static void BOTTLE_DESTROY_##TYPE (BOTTLE_##TYPE *self);                    \
+  static TYPE __dummy__##TYPE;                                                \
 \
   static const _BOTTLE_VTABLE_##TYPE BOTTLE_VTABLE_##TYPE =  \
   {                                                      \
@@ -63,6 +64,7 @@
     b->capacity = capacity;                              \
     b->closed = 0;                                       \
     b->frozen = 0;                                       \
+    b->__dummy__ = __dummy__##TYPE;                      \
     ASSERT (!pthread_mutex_init (&b->mutex, 0));         \
     ASSERT (!pthread_cond_init (&b->not_empty, 0));      \
     ASSERT (!pthread_cond_init (&b->not_full, 0));       \

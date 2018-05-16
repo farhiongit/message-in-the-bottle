@@ -80,6 +80,7 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
     pthread_cond_t               not_empty; \
     pthread_cond_t               not_full;  \
     const _BOTTLE_VTABLE_##TYPE *vtable;    \
+    TYPE __dummy__;                         \
   } BOTTLE_##TYPE;                          \
 \
   BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE( size_t capacity );  \
@@ -93,17 +94,29 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
   BOTTLE_CREATE_##TYPE(capacity)
 #define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
 
-#define BOTTLE_FILL(self, message)  \
+#define BOTTLE_FILL2(self, message)  \
   ((self)->vtable->Fill ((self), (message)))
+#define BOTTLE_FILL1(self)  \
+  ((self)->vtable->Fill ((self), ((self)->__dummy__)))
+#define BOTTLE_FILL(...) VFUNC(BOTTLE_FILL, __VA_ARGS__)
 
-#define BOTTLE_TRY_FILL(self, message)  \
+#define BOTTLE_TRY_FILL2(self, message)  \
   ((self)->vtable->TryFill ((self), (message)))
+#define BOTTLE_TRY_FILL1(self)  \
+  ((self)->vtable->TryFill ((self), ((self)->__dummy__)))
+#define BOTTLE_TRY_FILL(...) VFUNC(BOTTLE_TRY_FILL, __VA_ARGS__)
 
-#define BOTTLE_DRAIN(self, message)  \
+#define BOTTLE_DRAIN2(self, message)  \
   ((self)->vtable->Drain ((self), &(message)))
+#define BOTTLE_DRAIN1(self)  \
+  ((self)->vtable->Drain ((self), &((self)->__dummy__)))
+#define BOTTLE_DRAIN(...) VFUNC(BOTTLE_DRAIN, __VA_ARGS__)
 
-#define BOTTLE_TRY_DRAIN(self, message)  \
+#define BOTTLE_TRY_DRAIN2(self, message)  \
   ((self)->vtable->TryDrain ((self), &(message)))
+#define BOTTLE_TRY_DRAIN1(self)  \
+  ((self)->vtable->TryDrain ((self), &((self)->__dummy__)))
+#define BOTTLE_TRY_DRAIN(...) VFUNC(BOTTLE_TRY_DRAIN, __VA_ARGS__)
 
 #define BOTTLE_PLUG(self)  \
   do { ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
