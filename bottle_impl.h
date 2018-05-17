@@ -217,6 +217,12 @@
 \
   static void BOTTLE_DESTROY_##TYPE (BOTTLE_##TYPE *self)      \
   {                                                            \
+    ASSERT (!pthread_mutex_lock (&self->mutex));               \
+    self->closed = 1;                                          \
+    TYPE message;                                              \
+    while (self->queue.size > 0)                               \
+      ASSERT (QUEUE_POP_##TYPE (&self->queue, &message));      \
+    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     pthread_mutex_destroy (&self->mutex);                      \
     pthread_cond_destroy (&self->not_empty);                   \
     pthread_cond_destroy (&self->not_full);                    \

@@ -147,7 +147,8 @@ When concurrent threads are synchronized by an exchange of messages, the transmi
 when it has finished sending messages, so that receivers won't need to wait for extra messages.
 
 As the bottle won't be filled any more, we can close the bottle:
-the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will seal the mouth of the bottle (i.e. close the transmitter side of the bottle),
+the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will seal the mouth of the bottle
+(i.e. close the transmitter side of the bottle),
 unblock all receivers and wait for the bottle to be empty.
 It:
 
@@ -157,10 +158,15 @@ It:
 3. asks for any blocked `BOTTLE_DRAIN` calls (called by the receivers) to unblock and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
 
-`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` acts as if it was sending an end-of-file in the bottle.
-Therefore, the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` *must be done*
-after the feeders have finished their work: either at the end of the feeder treatment,
-or sequentially just after the feeder treatment.
+`BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`:
+
+- acts as if it was sending an end-of-file in the bottle.
+
+    Therefore, the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` *must be done*
+    after the feeders have finished their work (either at the end of the feeder treatment,
+    or sequentially just after the feeder treatment).
+
+- waits for all the eaters to finish their work before returning.
 
 After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters are still able to and *must* process the remaining messages
 in the bottle.
@@ -307,6 +313,8 @@ int main (void)
   printf ("Token released:  %s.\n", BOTTLE_TRY_DRAIN (tokens) ? "OK" : "NOK");
 
   printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+
+  BOTTLE_DESTROY (tokens);
 }
 ```
 
@@ -323,6 +331,41 @@ Token requested: OK.
 ```
 
 Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
+
+### FIFO thread-safe queue
+
+A bottle can be used as a basic FIFO queue, thread-safe, sharable between several treatements,
+being (like here) or not in the same thread.
+
+```c
+#include <stdio.h>
+#include "bottle_impl.h"
+DECLARE_BOTTLE (int)
+DEFINE_BOTTLE (int)
+
+static void write (BOTTLE (int) *b)
+{
+  for (int i = 1 ; i <= 3 ; i++)
+    BOTTLE_TRY_FILL (b, i);
+}
+
+static void read (BOTTLE (int) *b)
+{
+  int i;
+  while (BOTTLE_TRY_DRAIN (b, i))
+    printf ("%i\n", i);
+}
+
+int main (void)
+{
+  BOTTLE (int) * fifo = BOTTLE_CREATE (int, UNLIMITED);
+
+  write (fifo);
+  read (fifo);
+
+  BOTTLE_DESTROY (fifo);
+}
+```
 
 ## Advanced example
 

@@ -199,6 +199,9 @@ main (void)
   // From here, all eaters are done, and there are not anymore users of the bottle:
   // the bottle can be destroyed safely
 
+  pthread_join (starter, 0);
+  pthread_join (stopper, 0);
+  pthread_join (closer, 0);
   BOTTLE_DESTROY (bottle);
   fprintf (stderr, "Bottle %p destroyed.\n", (void *) bottle);
   fprintf (stderr, "Finished.\n");
