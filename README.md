@@ -27,6 +27,8 @@ And here it is.
 
 ## Creation of a bottle
 
+> BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
+
 To transport messages of type *T*, just create a message queue with:
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `);`
@@ -66,6 +68,10 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
 
 *The usage of buffered queues is neither required nor recommended for thread synchronization.*
 
+> size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
+
+> size_t **BOTTLE_LEVEL** (BOTTLE (*T*) \*bottle)
+
 `BOTTLE_CAPACITY` returns the capacity of the bottle.
 `BOTTLE_LEVEL` returns the level of the bottle (or `0` for unlimited capacity).
 
@@ -79,6 +85,8 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 <small>(c) Davis & Waddell - EcoGlass Oil Bottle with Tap Large 5 Litre | Peter's of Kensington</small>
 
 ### Receiving messages
+
+> int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
 
 The receivers can receive messages (drainig form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
@@ -99,7 +107,9 @@ Please notice that the second argument *message* is of type *T*, and not a point
 even though it might be modified by the callee (macro magic here).
 
 ### Sending messages
-  
+
+> int **BOTTLE_FILL** (BOTTLE (*T*) \*bottle, [*T* message])
+
 The senders can send messages (filling in through the mouth of the bottle)
 by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
 and the botlle is not closed.
@@ -146,6 +156,8 @@ the user program must respect those simple rules:
 
 ## Closing communication
 
+> void **BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY** (BOTTLE (*T*) \*bottle)
+
 When concurrent threads are synchronized by an exchange of messages, the transmitter must informs receivers
 when it has finished sending messages, so that receivers won't need to wait for extra messages.
 
@@ -181,6 +193,8 @@ threads* and need not be used in other cases (thread-safe shared FIFO queue).
 
 ## Destruction of a bottle
 
+> void **BOTTLE_DESTROY** (BOTTLE (*T*) \*bottle)
+
 Thereafter, once *all the receivers are done* in the user program, and the bottle is not needed anymore,
 it can be destroyed safely with `BOTTLE_DESTROY`.
 
@@ -199,6 +213,10 @@ If the content of the messages is not needed, the argument *message* can be *omi
 In this case, a bottle is simply used as a synchronization method or a token counter.
 
 ### Unblocking message queue functions
+
+> int **BOTTLE_TRY_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
+
+> int **BOTTLE_TRY_FILL** (BOTTLE (*T*) \*bottle, [*T* message])
 
 There are also unblocking versions of the filling and drainig functions.
 
@@ -227,6 +245,10 @@ Notice that the second argument *message* is of type *T*, and not a pointer to *
 even though it might be modified by `BOTTLE_TRY_DRAIN` (macro magic here).
 
 ### Interrupting communication
+
+> void **BOTTLE_PLUG** (BOTTLE (*T*) \*bottle)
+
+> void **BOTTLE_UNPLUG** (BOTTLE (*T*) \*bottle)
 
 Finally, the communication between sender and receiver threads can be stopped and restarted at will if needed.
 
