@@ -2,8 +2,8 @@ Thread-safe message queue for thread synchronization
 ====================================================
 
 I have recently read about the Go language. I was not really convinced by the concept.
-The minimalistic grammar and overall simplicity (as compared to C++ or Java) are nice feature,
-but the language still needs optimisation and is sometime tricky.
+The minimalistic grammar and overall simplicity (as compared to C++ or Java) are nice features,
+but the language still needs optimization and is sometime tricky.
 
 Nevertheless, I noticed the use of the gracious message queue pattern (called channels in Go) for
 thread (called goroutines) synchronization.
@@ -65,6 +65,9 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
 - A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
 
 *The usage of buffered queues is neither required nor recommended for thread synchronization.*
+
+`BOTTLE_CAPACITY` returns the capacity of the bottle.
+`BOTTLE_LEVEL` returns the level of the bottle (or `0` for unlimited capacity).
 
 ## Exchanging messages between thread
 
@@ -300,41 +303,45 @@ typedef int Token;
 DECLARE_BOTTLE (Token)
 DEFINE_BOTTLE (Token)
 
+#define PRINT_TOKEN printf (" (%lu/%lu).\n", BOTTLE_LEVEL (tokens_in_use), BOTTLE_CAPACITY (tokens_in_use))
+#define GET_TOKEN   printf ("Token requested: %s", BOTTLE_TRY_FILL (tokens_in_use) ? "OK" : "NOK")
+#define LET_TOKEN   printf ("Token released:  %s", BOTTLE_TRY_DRAIN (tokens_in_use) ? "OK" : "NOK")
+
 int main (void)
 {
-  BOTTLE (Token) * tokens = BOTTLE_CREATE (Token, 3);
+  BOTTLE (Token) * tokens_in_use = BOTTLE_CREATE (Token, 3);
 
-  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
-  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
-  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
-  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
-  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+  GET_TOKEN ; PRINT_TOKEN ;
+  GET_TOKEN ; PRINT_TOKEN ;
+  GET_TOKEN ; PRINT_TOKEN ;
+  GET_TOKEN ; PRINT_TOKEN ;
+  GET_TOKEN ; PRINT_TOKEN ;
 
-  printf ("Token released:  %s.\n", BOTTLE_TRY_DRAIN (tokens) ? "OK" : "NOK");
+  LET_TOKEN ; PRINT_TOKEN ;
 
-  printf ("Token requested: %s.\n", BOTTLE_TRY_FILL (tokens) ? "OK" : "NOK");
+  GET_TOKEN ; PRINT_TOKEN ;
 
-  BOTTLE_DESTROY (tokens);
+  BOTTLE_DESTROY (tokens_in_use);
 }
 ```
 
 displays:
 
 ```
-Token requested: OK.
-Token requested: OK.
-Token requested: OK.
-Token requested: NOK.
-Token requested: NOK.
-Token released:  OK.
-Token requested: OK.
+Token requested: OK (1/3).
+Token requested: OK (2/3).
+Token requested: OK (3/3).
+Token requested: NOK (3/3).
+Token requested: NOK (3/3).
+Token released:  OK (2/3).
+Token requested: OK (3/3).
 ```
 
 Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
 ### FIFO thread-safe queue
 
-A bottle can be used as a basic FIFO queue, thread-safe, sharable between several treatements,
+A bottle can be used as a basic buffered FIFO queue, thread-safe, sharable between several treatements,
 being (like here) or not in the same thread.
 
 ```c

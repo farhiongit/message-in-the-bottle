@@ -139,4 +139,6 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
 
 #define BOTTLE_CAPACITY(self) ((self)->capacity)
 
+#define BOTTLE_LEVEL(self) ((self)->queue.size)
+
 #endif
