@@ -27,11 +27,15 @@ And here it is.
 
 ## Creation of a bottle
 
-> BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
+> BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])`
+>
+> *The second argument is optional.*
 
 To transport messages of type *T*, just create a message queue with:
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `);`
+
+*T* could be any standard or user defined (`typedef`) type, simple or composed structure (`struct`).
 
 For instance, to create a message queue *b* for exchanging integers between threads, use:
 
@@ -55,18 +59,20 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
 
     This could be used to manage tokens: *capacity* is then the number of available tokens.
     Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_TRY_DRAIN` to release a token.
+    The bottle is then used as a container of controlled capacity.
     `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
 
 - A *capacity* set to `UNLIMITED` defines a buffered queue of unlimited capacity (only limited by system resources).
 
-    This could useful to exchange data between unsynchronized (concurrent or sequential) treatments,
+    This could be useful to exchange data between unsynchronized (concurrent or sequential) treatments,
     some writing (with `BOTTLE_TRY_FILL`), other reading (with `BOTTLE_TRY_DRAIN`).
     The bottle is then used as a trivial thread-safe FIFO queue.
     `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
 
 - A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
 
-*The usage of buffered queues is neither required nor recommended for thread synchronization.*
+*The usage of buffered queues is neither required nor recommended for thread synchronization.
+It would partly unsynchronize threads and use a significant amount of memory.*
 
 > size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
 
@@ -87,6 +93,8 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 ### Receiving messages
 
 > int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
+>
+> *The second argument is optional. If omitted, the bottle is drained but the message is lost.*
 
 The receivers can receive messages (drainig form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
@@ -109,6 +117,8 @@ even though it might be modified by the callee (macro magic here).
 ### Sending messages
 
 > int **BOTTLE_FILL** (BOTTLE (*T*) \*bottle, [*T* message])
+>
+> *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used.*
 
 The senders can send messages (filling in through the mouth of the bottle)
 by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
@@ -205,18 +215,15 @@ otherwise, some thread resources might not be released properly (mutexes and con
 
 ## Other features
 
-### Hidden data
-
-If the content of the messages is not needed, the argument *message* can be *omitted* in calls to
-`BOTTLE_TRY_DRAIN`, `BOTTLE_DRAIN`, `BOTTLE_TRY_FILL` and `BOTTLE_FILL`.
-
-In this case, a bottle is simply used as a synchronization method or a token counter.
-
 ### Unblocking message queue functions
 
 > int **BOTTLE_TRY_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
+>
+> *The second argument is optional. If omitted, the bottle is drained but the message is lost.*
 
 > int **BOTTLE_TRY_FILL** (BOTTLE (*T*) \*bottle, [*T* message])
+>
+> *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used.*
 
 There are also unblocking versions of the filling and drainig functions.
 
@@ -257,11 +264,26 @@ The mouth of the bottle can be:
 - plugged (stopping communication) with `BOTTLE_PLUG`,
 - unplugged (to restart communication) with `BOTTLE_UNPLUG`.
 
+### Hidden data
+
+If the content of the messages is not needed, the argument *message* can be *omitted* in calls to
+`BOTTLE_TRY_DRAIN`, `BOTTLE_DRAIN`, `BOTTLE_TRY_FILL` and `BOTTLE_FILL`.
+
+In this case, a bottle is simply used as a synchronization method or a token counter.
+
+# Source files
+
+- [`bottle.h`](bottle.h) declares the user interface documented here.
+- [`bottle_impl.h`](bottle_impl.h) defines the user programming interface.
+- [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h).
+
 # Examples
 
 All sources should be compiled with the option `-pthread`.
 
-## Thread synchronization
+## Unbuffered bottle: Thread synchronization
+
+### Simple example
 
 The source below is a simple example of the standard use of the API for thread synchronization.
 
@@ -314,9 +336,14 @@ Comments:
   and waits for the eater thread to finish (`pthread_join (eater, 0)`)
   before destroying the bottle (`BOTTLE_DESTROY`).
 
-## Token management
+### Advanced example
 
-Tokens can be managed with a buffered bottle:
+[`bottle_example.c`](bottle_example.c) is a complete example of a program (compile with option `-pthread`)
+using a synchronized thread-safe FIFO message queue.
+
+## Buffered bottle of limited capacity: Token management
+
+Tokens can be managed with a buffered bottle, in this very naive model:
 
 ```c
 #include <stdio.h>
@@ -361,7 +388,7 @@ Token requested: OK (3/3).
 
 Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
-### FIFO thread-safe queue
+### Buffered bottle of unlimited capacity: FIFO thread-safe queue
 
 A bottle can be used as a basic buffered FIFO queue, thread-safe, sharable between several treatements,
 being (like here) or not in the same thread.
@@ -395,10 +422,5 @@ int main (void)
   BOTTLE_DESTROY (fifo);
 }
 ```
-
-## Advanced example
-
-`bottle_example.c` is a complete example of a program (compile with option `-pthread`)
-using a synchronized thread-safe FIFO message queue.
 
 **Have fun !**
