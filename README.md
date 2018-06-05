@@ -29,7 +29,7 @@ And here it is.
 
 > BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])`
 >
-> *The second argument is optional.*
+> *The second argument is optional and defaults to `UNBUFFERED` (see below).*
 
 To transport messages of type *T*, just create a message queue with:
 
@@ -92,9 +92,14 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 
 ### Receiving messages
 
-> int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
+> int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T*& message])
 >
-> *The second argument is optional. If omitted, the bottle is drained but the message is lost.*
+> *The second argument `message` is optional. If omitted, the bottle is drained but the message is not fetched and is lost.*
+>
+> *It is of type T&.
+> It is passed as a **reference**, and not as a pointer to T.
+> Therefore, it might be modified by the callee (just a little bit of macro magic here).*
+
 
 The receivers can receive messages (drainig form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
@@ -105,20 +110,17 @@ The receivers can receive messages (drainig form the tap), as long as the bottle
     by the eaters and stop the reception of any data from the bottle.
 
 - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle
-      (it modifies the value of the second argument *message*) and returns 1.
+  (it modifies the value of the second argument *message*) and returns 1.
 - Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
-        until there is data to receive.
+  until there is data to receive.
 
 Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle.
-
-Please notice that the second argument *message* is of type *T*, and not a pointer to *T*,
-even though it might be modified by the callee (macro magic here).
 
 ### Sending messages
 
 > int **BOTTLE_FILL** (BOTTLE (*T*) \*bottle, [*T* message])
 >
-> *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used.*
+> *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used to fill the bottle.*
 
 The senders can send messages (filling in through the mouth of the bottle)
 by calling `BOTTLE_FILL (`*bottle*`, `*message*`)`, as long as the mouth is open
@@ -161,8 +163,8 @@ the user program must respect those simple rules:
       the message is owned by the receiver (which could modify it) and does not belong to the sender anymore.
 
 - The **receiver** *must*, after receiving a message
-  (i.e. after the call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`),
-  deallocate, after use, all the resources of the message (those previously allocated by the sender).
+  (i.e. after the call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`), and after use of the message,
+  deallocate all the resources of the message (those previously allocated by the sender).
 
 ## Closing communication
 
@@ -178,7 +180,7 @@ unblock all receivers and wait for the bottle to be empty.
 It:
 
 1. prevents any new message from being sent in the bottle (just in case) :
-  `BOTTLE_FILL` and `BOTTLE_TRY_FILL` will return 0 immediately (without blocking). 
+  `BOTTLE_FILL` and `BOTTLE_TRY_FILL` will return 0 immediately (without blocking).
 2. waits for the bottle to be emptied (by the calls to `BOTTLE_DRAIN` in the receivers).
 3. asks for any blocked `BOTTLE_DRAIN` calls (called by the receivers) to unblock and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
