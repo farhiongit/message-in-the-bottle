@@ -1,9 +1,12 @@
 Thread-safe message queue for thread synchronization
 ====================================================
 
-I have recently read about the Go language. I was not really convinced by the concept.
+> This project implements in C the concept of channels like the one found in Go language.
+> The messages exchanged through those channels (here called bottles) are strongly typed.
+
+I have recently read about the Go language.
 The minimalistic grammar and overall simplicity (as compared to C++ or Java) are nice features,
-but the language still needs optimization and is sometime tricky.
+even if the language still needs optimization and is sometime tricky.
 
 Nevertheless, I noticed the use of the gracious message queue pattern (called channels in Go) for
 thread (called goroutines) synchronization.
@@ -390,7 +393,7 @@ Token requested: OK (3/3).
 
 Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
-### Buffered bottle of unlimited capacity: FIFO thread-safe queue
+## Buffered bottle of unlimited capacity: FIFO thread-safe queue
 
 A bottle can be used as a basic buffered FIFO queue, thread-safe, sharable between several treatements,
 being (like here) or not in the same thread.
