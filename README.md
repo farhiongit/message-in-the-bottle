@@ -2,7 +2,10 @@ Thread-safe message queue for thread synchronization
 ====================================================
 
 > This project implements in C the concept of channels like the one found in Go language.
+>
 > The messages exchanged through those channels (here called bottles) are strongly typed.
+>
+> Look at the simple example below.
 
 I have recently read about the Go language.
 The minimalistic grammar and overall simplicity (as compared to C++ or Java) are nice features,
@@ -44,7 +47,7 @@ For instance, to create a message queue *b* for exchanging integers between thre
 
 `BOTTLE (int) *b = BOTTLE_CREATE (int);`
 
-The message queue is a strongly typed (yes, it is a hand-made template container) FIFO queue.
+The message queue is **a strongly typed** (yes, it is a hand-made template container) FIFO queue.
 
 ### Unbuffered message queue
 
@@ -104,7 +107,7 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 > Therefore, it might be modified by the callee (just a little bit of macro magic here).*
 
 
-The receivers can receive messages (drainig form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
+The receivers can receive messages (draining form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
 - `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
        closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
@@ -190,7 +193,7 @@ It:
 
 `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`:
 
-- acts as if it was sending an end-of-file in the bottle.
+- acts as if it were sending an end-of-file in the bottle.
 
     Therefore, the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` *must be done*
     after the feeders have finished their work (either at the end of the feeder treatment,
@@ -230,7 +233,7 @@ otherwise, some thread resources might not be released properly (mutexes and con
 >
 > *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used.*
 
-There are also unblocking versions of the filling and drainig functions.
+There are also unblocking versions of the filling and draining functions.
 
 These functions return immediately without blocking. *They are **not** suited for thread synchronization* and are of limited use.
 
@@ -256,14 +259,13 @@ behaves like a simple thread-safe FIFO message queue:
 Notice that the second argument *message* is of type *T*, and not a pointer to *T*,
 even though it might be modified by `BOTTLE_TRY_DRAIN` (macro magic here).
 
-### Interrupting communication
+### Halting communication
 
 > void **BOTTLE_PLUG** (BOTTLE (*T*) \*bottle)
 
 > void **BOTTLE_UNPLUG** (BOTTLE (*T*) \*bottle)
 
-Finally, the communication between sender and receiver threads can be stopped and restarted at will if needed.
-
+The communication between sender and receiver threads can be stopped and restarted at will if needed.
 The mouth of the bottle can be:
 
 - plugged (stopping communication) with `BOTTLE_PLUG`,
@@ -276,11 +278,25 @@ If the content of the messages is not needed, the argument *message* can be *omi
 
 In this case, a bottle is simply used as a synchronization method or a token counter.
 
-# Source files
+# Usage
 
-- [`bottle.h`](bottle.h) declares the user interface documented here.
-- [`bottle_impl.h`](bottle_impl.h) defines the user programming interface.
-- [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h).
+Before use:
+1. include header file `bottle_impl.h` before usage.
+2. instanciate a template of a given type of messages with `DECLARE_BOTTLE` and `DEFINE_BOTTLE`.
+
+For instance, to exchange message texts between threads:
+```c
+#include "bottle_impl.h"
+typedef const char * Message;   // A user-defined type of messages.
+DECLARE_BOTTLE (Message)        // Declare the usage of bottles for the user-defined type.
+DEFINE_BOTTLE (Message)         // Define the usage of bottles for the user-defined type.
+```
+
+## Source files
+
+- [`bottle.h`](bottle.h) declares the user interface documented here (about 100 lines of source code).
+- [`bottle_impl.h`](bottle_impl.h) defines the user programming interface (about 200 lines of source code).
+- [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h). It permits usage of optional parameters in function signatures.
 
 # Examples
 
@@ -332,7 +348,7 @@ main (void)
 Comments:
 
 - A bottle is created (`BOTTLE_CREATE`) to communicate synchronously between two threads, a transmitter and a receiver:
-  it is a template container which type is `BOTTLE (Message)`, where `Message` is a user-deined type.
+  it is a template container which type is `BOTTLE (Message)`, where `Message` is a user-defined type.
 - The `eat` function (the receiver which calls `BOTTLE_DRAIN`) is in one thread `eater` (but there could be several), which pace is synchronized with the transmitter.
   That's what it's all about: synchonizing threads with messages !
 - The sending loop (the transmitter which calls `BOTTLE_FILL`) is in the same thread (here the `main` thread) as the one which has created the bottle.
