@@ -19,17 +19,43 @@ This pattern is a FIFO thread-safe message queue suited for thread synchronizati
 The pattern of message driven synchronization is of interest because it is intuitive and of a higher level
 of abstraction than mutexes and conditions:
 
-- some threads `A` fill the message queue
-- some other threads `B` eat up the message queue.
+- some threads `A` (usually called the senders or the producers) fill the message queue ;
+- some other threads `B` (usually called the receivers or the consumers) eat up the message queue.
 
 Threads B are gracefully synchronized with threads A.
 
 Therefore, I grabbed my copy of the (excellent) book "Programming with POSIX threads" by Butenhof, where the pattern is mentionned, to
-implement it for my old favorite language C.
+implement it for my favorite C language.
 
 And here it is.
 
 # Insights of the user interface
+
+The user interface is available in two styles, a macro-like and a C-like style.
+Those two are strictly equivalent:
+
+|| Description          |Macro-like style                     | C-like style|
+|-|---------------------|-------------------------------------|-------------|
+|**Declaration**        |
+||Type                  | `BOTTLE(`*T*`)`                     | `bottle_t(`*T*`)`
+|**Life cycle**         |
+||Create                | `BOTTLE_CREATE`                     | `bottle_create`
+||Destroy               | `BOTTLE_DESTROY`                    | `bottle_destroy`
+|**Actions**            |
+||Send message          | `BOTTLE_FILL`                       | `bottle_send`
+||Receive message       | `BOTTLE_DRAIN`                      | `bottle_recv`
+||Close sending end     | `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` | `bottle_close`
+|**Other actions**      |
+||Try sending message   | `BOTTLE_TRY_FILL`                   | `bottle_try_send`
+||Try receiving message | `BOTTLE_TRY_DRAIN`                  | `bottle_try_recv`
+||Plug                  | `BOTTLE_PLUG`                       | `bottle_plug`
+||Unplug                | `BOTTLE_UNPLUG`                     | `bottle_unplug`
+|**Properties**         |
+||Is closed             | `BOTTLE_IS_CLOSED`                  | `bottle_is_closed`
+||Get buffer capacity   | `BOTTLE_CAPACITY`                   | `bottle_capacity`
+||Get buffer level      | `BOTTLE_LEVEL`                      | `bottle_level`
+
+The following text uses the macro-like style but the equivalent C-like style can be used instead.
 
 ## Creation of a bottle
 
@@ -56,7 +82,13 @@ Such an unbuffered queue is suitable to synchronize threads running concurrently
 
 ### Buffered message queue
 
-If needed, buffered queues can be used in some cases (for instance to limit the number of thread workers).
+Even if unbuffred queues are efficient in most cases, buffered queues can be needed for instance:
+
+- to limit the number of thread workers,
+- in case of large amount of high speed exchanged messages between the sender thread and the receiver thread, where context switch overhead
+between threads would be counter-productive. The buffer capacity will allow to process sending and receiving messages by chunks, therefore reducing
+the number of context switch.
+
 To create a buffered message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `, ` *capacity* `);`

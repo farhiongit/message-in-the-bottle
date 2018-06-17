@@ -142,6 +142,9 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
 #define BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY(self)  \
   do { (self)->vtable->Dry ((self)); } while (0)
 
+/// int BOTTLE_IS_CLOSED (BOTTLE (T) *bottle)
+#define BOTTLE_IS_CLOSED(self) ((self)->closed)
+
 /// void BOTTLE_DESTROY (BOTTLE (T) *bottle)
 #define BOTTLE_DESTROY(self)  \
   do { (self)->vtable->Destroy ((self)); } while (0)
@@ -151,5 +154,21 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
 
 /// size_t BOTTLE_LEVEL (BOTTLE (T) *bottle)
 #define BOTTLE_LEVEL(self) ((self)->queue.size)
+
+/// A more C like syntax
+
+#define bottle_t(type)            BOTTLE(type)
+#define bottle_create(...)        BOTTLE_CREATE(__VA_ARGS__)
+#define bottle_send(...)          BOTTLE_FILL(__VA_ARGS__)
+#define bottle_try_send(...)      BOTTLE_TRY_FILL(__VA_ARGS__)
+#define bottle_recv(...)          BOTTLE_DRAIN(__VA_ARGS__)
+#define bottle_try_recv(...)      BOTTLE_TRY_DRAIN(__VA_ARGS__)
+#define bottle_close(self)        BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY(self)
+#define bottle_destroy(self)      BOTTLE_DESTROY(self)
+#define bottle_capacity(self)     BOTTLE_CAPACITY(self)
+#define bottle_level(self)        BOTTLE_LEVEL(self)
+#define bottle_is_closed(self)    BOTTLE_IS_CLOSED(self)
+#define bottle_plug(self)         BOTTLE_PLUG(self)
+#define bottle_unplug(self)       BOTTLE_UNPLUG(self)
 
 #endif
