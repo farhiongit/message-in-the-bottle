@@ -208,14 +208,14 @@ the user program must respect those simple rules:
 
 > void **BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY** (BOTTLE (*T*) \*bottle)
 
-When concurrent threads are synchronized by an exchange of messages, the transmitter must informs receivers
+When concurrent threads are synchronized by an exchange of messages, the transmitter must inform receivers
 when it has finished sending messages, so that receivers won't need to wait for extra messages.
 
-As the bottle won't be filled any more, we can close the bottle:
+Once the bottle won't be filled with any more messages, we can close it:
 the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will seal the mouth of the bottle
 (i.e. close the transmitter side of the bottle),
 unblock all receivers and wait for the bottle to be empty.
-It:
+This:
 
 1. prevents any new message from being sent in the bottle (just in case) :
   `BOTTLE_FILL` and `BOTTLE_TRY_FILL` will return 0 immediately (without blocking).
@@ -233,8 +233,7 @@ It:
 
 - waits for all the eaters to finish their work before returning.
 
-After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters are still able to and *must* process the remaining messages
-in the bottle.
+After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters are still able to (and *should*) process the remaining messages in the bottle to avoid any memory leak due to unprocessed remaining messages.
 
 The user program *must* wait for all the eaters to be finished before destroying the bottle.
 
@@ -320,8 +319,8 @@ For instance, to exchange message texts between threads:
 ```c
 #include "bottle_impl.h"
 typedef const char * Message;   // A user-defined type of messages.
-DECLARE_BOTTLE (Message)        // Declare the usage of bottles for the user-defined type.
-DEFINE_BOTTLE (Message)         // Define the usage of bottles for the user-defined type.
+DECLARE_BOTTLE (Message)        // Declares the usage of bottles for the user-defined type.
+DEFINE_BOTTLE (Message)         // Defines the usage of bottles for the user-defined type.
 ```
 
 ## Source files
@@ -347,11 +346,11 @@ It uses the C-like style.
 
 #include "bottle_impl.h"
 typedef const char * Message;
-DECLARE_BOTTLE (Message)
-DEFINE_BOTTLE (Message)
+DECLARE_BOTTLE (Message)        // Declares the template for type 'Message' (note, no trailing ';')
+DEFINE_BOTTLE (Message)         // Defines the template for type 'Message' (note, no trailing ';')
 
 static void *
-eat (void *arg)
+eat (void *arg)                 // The thread that receives the messages
 {
   Message m;
   bottle_t (Message) * bottle = arg;
@@ -361,7 +360,7 @@ eat (void *arg)
 }
 
 int
-main (void)
+main (void)                     // The (main) thread that creates the bottle, and sends the messages
 {
   bottle_t (Message) * bottle = bottle_create (Message);
 
@@ -370,11 +369,14 @@ main (void)
 
   Message police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
   for (size_t i = 0; i < 2 * sizeof (police) / sizeof (*police); i++)
-    bottle_send (bottle, police[i / 2]), sleep (1);
+  {
+    bottle_send (bottle, police[i / 2]);
+    sleep (1);
+  }
 
-  bottle_close (bottle);
-  pthread_join (eater, 0);
-  bottle_destroy (bottle);
+  bottle_close (bottle);        // Tell the receiver thread that the sending thread has finished sending messages
+  pthread_join (eater, 0);      // Wait for the receiver thread to finish its work (it uses the bottle).
+  bottle_destroy (bottle);      // Destroy the bottle once both threads are over.
 }
 ```
 
