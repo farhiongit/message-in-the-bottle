@@ -69,11 +69,11 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
   typedef struct _BOTTLE_##TYPE             \
   {                                         \
     struct _queue_##TYPE {                  \
-      struct _elem_##TYPE *front;           \
-      struct _elem_##TYPE *back;            \
-      size_t size;                          \
+      struct _elem_##TYPE * front;          \
+      struct _elem_##TYPE * back;           \
+      size_t                size;           \
+      size_t                capacity;       \
     } queue;                                \
-    size_t                       capacity;  \
     int                          closed;    \
     int                          frozen;    \
     pthread_mutex_t              mutex;     \
@@ -150,7 +150,7 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
   do { (self)->vtable->Destroy ((self)); } while (0)
 
 /// size_t BOTTLE_CAPACITY (BOTTLE (T) *bottle)
-#define BOTTLE_CAPACITY(self) ((self)->capacity)
+#define BOTTLE_CAPACITY(self) ((self)->queue.capacity)
 
 /// size_t BOTTLE_LEVEL (BOTTLE (T) *bottle)
 #define BOTTLE_LEVEL(self) ((self)->queue.size)

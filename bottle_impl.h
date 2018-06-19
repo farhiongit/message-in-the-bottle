@@ -36,6 +36,9 @@
 #  define DEBUG(stmt)
 #endif
 
+#define QUEUE_FULL(queue) ((queue).capacity && (queue).size >= (queue).capacity)
+#define QUEUE_EMPTY(queue) ((queue).size == 0)
+
 #define DEFINE_BOTTLE( TYPE )                                                 \
   static int  BOTTLE_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);         \
   static int  BOTTLE_TRY_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);     \
@@ -61,7 +64,7 @@
     ASSERT (b);                                          \
                                                          \
     b->vtable = &BOTTLE_VTABLE_##TYPE;                   \
-    b->capacity = capacity;                              \
+    b->queue.capacity = capacity;                        \
     b->closed = 0;                                       \
     b->frozen = 0;                                       \
     b->__dummy__ = __dummy__##TYPE;                      \
@@ -119,19 +122,17 @@
       return errno = ECONNABORTED, ret;                        \
     }                                                          \
     while (!self->closed &&                                    \
-           (self->frozen ||                                    \
-            (self->capacity && self->queue.size >= self->capacity))) \
+           (self->frozen || QUEUE_FULL (self->queue)))         \
       ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex));   \
     if (self->closed)                                          \
     {                                                          \
       ASSERT (!pthread_mutex_unlock (&self->mutex));           \
       return errno = ECONNABORTED, ret;                        \
     }                                                          \
-    if (!self->frozen &&                                       \
-        (!self->capacity || self->queue.size < self->capacity))\
+    if (!self->frozen && !QUEUE_FULL (self->queue))            \
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, self->queue.size)); \
+      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
       ASSERT (!pthread_cond_signal (&self->not_empty));        \
       ret = 1;                                                 \
     }                                                          \
@@ -153,10 +154,10 @@
       ASSERT (!pthread_mutex_unlock (&self->mutex));           \
       return errno = EWOULDBLOCK, ret;                         \
     }                                                          \
-    if (!self->capacity || self->queue.size < self->capacity)  \
+    if (!QUEUE_FULL (self->queue))                             \
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, self->queue.size)); \
+      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
       ASSERT (!pthread_cond_signal (&self->not_empty));        \
       ret = 1;                                                 \
     }                                                          \
@@ -170,12 +171,12 @@
   {                                                            \
     int ret = 0;                                               \
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
-    while (!self->closed && self->queue.size == 0)             \
+    while (!self->closed && QUEUE_EMPTY (self->queue))         \
       ASSERT (!pthread_cond_wait (&self->not_empty, &self->mutex)); \
-    if (self->queue.size > 0)                                  \
+    if (!QUEUE_EMPTY (self->queue))                            \
     {                                                          \
       ASSERT (QUEUE_POP_##TYPE (&self->queue, message));       \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, self->queue.size)); \
+      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
       ASSERT (!pthread_cond_signal (&self->not_full));         \
       ret = 1;                                                 \
     }                                                          \
@@ -189,10 +190,10 @@
   {                                                            \
     int ret = 0;                                               \
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
-    if (self->queue.size > 0)                                  \
+    if (!QUEUE_EMPTY (self->queue))                            \
     {                                                          \
       ASSERT (QUEUE_POP_##TYPE (&self->queue, message));       \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, self->queue.size)); \
+      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
       ASSERT (!pthread_cond_signal (&self->not_full));         \
       ret = 1;                                                 \
     }                                                          \
@@ -208,7 +209,7 @@
   {                                                            \
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
     self->closed = 1;                                          \
-    while (self->queue.size > 0)                               \
+    while (!QUEUE_EMPTY (self->queue))                         \
       ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex)); \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     ASSERT (!pthread_cond_broadcast (&self->not_empty));       \
@@ -220,7 +221,7 @@
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
     self->closed = 1;                                          \
     TYPE message;                                              \
-    while (self->queue.size > 0)                               \
+    while (!QUEUE_EMPTY (self->queue))                         \
       ASSERT (QUEUE_POP_##TYPE (&self->queue, &message));      \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     pthread_mutex_destroy (&self->mutex);                      \
