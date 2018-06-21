@@ -45,7 +45,7 @@
     }\
   } while(0)
 
-enum { UNLIMITED = 0, UNBUFFERED = 1 };
+enum { UNBUFFERED = 1 };
 
 #define DECLARE_BOTTLE( TYPE )     \
 \
@@ -69,8 +69,9 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
   typedef struct _BOTTLE_##TYPE             \
   {                                         \
     struct _queue_##TYPE {                  \
-      struct _elem_##TYPE * front;          \
-      struct _elem_##TYPE * back;           \
+      TYPE* buffer;                         \
+      TYPE* reader_head;                    \
+      TYPE* writer_head;                    \
       size_t                size;           \
       size_t                capacity;       \
     } queue;                                \
@@ -150,10 +151,7 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
   do { (self)->vtable->Destroy ((self)); } while (0)
 
 /// size_t BOTTLE_CAPACITY (BOTTLE (T) *bottle)
-#define BOTTLE_CAPACITY(self) ((self)->queue.capacity)
-
-/// size_t BOTTLE_LEVEL (BOTTLE (T) *bottle)
-#define BOTTLE_LEVEL(self) ((self)->queue.size)
+#define BOTTLE_CAPACITY(self) QUEUE_CAPACITY((self)->queue)
 
 /// A more C like syntax
 
@@ -166,7 +164,6 @@ enum { UNLIMITED = 0, UNBUFFERED = 1 };
 #define bottle_close(self)        BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY(self)
 #define bottle_destroy(self)      BOTTLE_DESTROY(self)
 #define bottle_capacity(self)     BOTTLE_CAPACITY(self)
-#define bottle_level(self)        BOTTLE_LEVEL(self)
 #define bottle_is_closed(self)    BOTTLE_IS_CLOSED(self)
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)

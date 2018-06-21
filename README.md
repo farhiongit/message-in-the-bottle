@@ -53,7 +53,6 @@ Those two are strictly equivalent:
 |**Properties**         |
 ||Is closed             | `BOTTLE_IS_CLOSED`                  | `bottle_is_closed`
 ||Get buffer capacity   | `BOTTLE_CAPACITY`                   | `bottle_capacity`
-||Get buffer level      | `BOTTLE_LEVEL`                      | `bottle_level`
 
 The following text uses the macro-like style but the equivalent C-like style can be used instead.
 
@@ -85,9 +84,10 @@ Such an unbuffered queue is suitable to synchronize threads running concurrently
 Even if unbuffred queues are efficient in most cases, buffered queues can be needed for instance:
 
 - to limit the number of thread workers,
-- in case of large amount of high speed exchanged messages between the sender thread and the receiver thread, where context switch overhead
-between threads would be counter-productive. The buffer capacity will allow to process sending and receiving messages by chunks, therefore reducing
-the number of context switch.
+- in case of a very high rate (more than 100k per second) of exchanged messages
+  between the sender thread and the receiver thread,
+  where context switch overhead between threads would be counter-productive. The buffer capacity will allow to process
+  sending and receiving messages by chunks, therefore reducing the number of context switch.
 
 To create a buffered message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
 
@@ -100,17 +100,12 @@ To create a buffered message queue, pass its *capacity* as an optional (positive
     The bottle is then used as a container of controlled capacity.
     `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
 
-- A *capacity* set to `UNLIMITED` defines a buffered queue of unlimited capacity (only limited by system resources).
-
-    This could be useful to exchange data between unsynchronized (concurrent or sequential) treatments,
-    some writing (with `BOTTLE_TRY_FILL`), other reading (with `BOTTLE_TRY_DRAIN`).
-    The bottle is then used as a trivial thread-safe FIFO queue.
-    `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
-
 - A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
 
+Buffered queues are implemented as preallocated arrays rather than as conventional linked-list: elements of the array are reused to transport all messages, whereas with a linked list, each message would require a dynamically allocated new element in the list, adding memory management pverhead. This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.github.io/disruptor/).
+
 *The usage of buffered queues is neither required nor recommended for thread synchronization.
-It would partly unsynchronize threads and use a significant amount of memory.*
+It would partly unsynchronize threads and uses a larger amount of memory.*
 
 > size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
 
@@ -399,7 +394,61 @@ Comments:
 [`bottle_example.c`](bottle_example.c) is a complete example of a program (compile with option `-pthread`)
 using a synchronized thread-safe FIFO message queue.
 
-## Buffered bottle of limited capacity: Token management
+## Buffered bottle
+
+### High performance message exchanges
+
+When high performance of exchanges is required between threads (more than 100 000 messages per seconds), a buffered bottle is a good choice (reminder: in other cases, an unbuffered bottle is far enough.)
+
+In the following example, this enhance performance by a factor of about 40, because it cuts the concurrency overhead off.
+
+```c
+#include "bottle_impl.h"
+DECLARE_BOTTLE (int)
+DEFINE_BOTTLE (int)
+
+#define NB_MESSAGES 25000000
+#define BUFFER_SIZE 25000
+//#define BUFFER_SIZE UNBUFFERED
+
+static size_t LEVEL[2 * NB_MESSAGES];
+static size_t nb_p, nb_c;
+
+static void *eat (void *arg)
+{
+  bottle_t (int) * bottle = arg;
+  while (bottle_recv (bottle))
+  {
+    LEVEL[nb_c++ + nb_p] = bottle_level (bottle);
+  }
+  return 0;
+}
+
+int
+main (void)
+{
+  bottle_t (int) * bottle = bottle_create (int, BUFFER_SIZE);
+
+  pthread_t eater;
+  pthread_create (&eater, 0, eat, bottle);
+
+  for (size_t i = 0; i < NB_MESSAGES; i++)
+  {
+    if (bottle_send (bottle))
+      LEVEL[nb_c + nb_p++] = bottle_level (bottle);
+    else
+      exit (1);
+  }
+
+  bottle_close (bottle);
+  pthread_join (eater, 0);
+  bottle_destroy (bottle);
+
+  printf ("%zu messages produced, %zu messages consumed.\n", nb_p, nb_c);
+}
+```
+
+### Token management
 
 Tokens can be managed with a buffered bottle, in this very naive model:
 
@@ -410,7 +459,7 @@ typedef int Token;
 DECLARE_BOTTLE (Token)
 DEFINE_BOTTLE (Token)
 
-#define PRINT_TOKEN printf (" (%lu/%lu).\n", BOTTLE_LEVEL (tokens_in_use), BOTTLE_CAPACITY (tokens_in_use))
+#define PRINT_TOKEN printf (" (%lu/%lu).\n", QUEUE_SIZE((tokens_in_use)->queue), BOTTLE_CAPACITY (tokens_in_use))
 #define GET_TOKEN   printf ("Token requested: %s", BOTTLE_TRY_FILL (tokens_in_use) ? "OK" : "NOK")
 #define LET_TOKEN   printf ("Token released:  %s", BOTTLE_TRY_DRAIN (tokens_in_use) ? "OK" : "NOK")
 
@@ -445,40 +494,5 @@ Token requested: OK (3/3).
 ```
 
 Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
-
-## Buffered bottle of unlimited capacity: FIFO thread-safe queue
-
-A bottle can be used as a basic buffered FIFO queue, thread-safe, sharable between several treatements,
-being (like here) or not in the same thread.
-
-```c
-#include <stdio.h>
-#include "bottle_impl.h"
-DECLARE_BOTTLE (int)
-DEFINE_BOTTLE (int)
-
-static void write (BOTTLE (int) *b)
-{
-  for (int i = 1 ; i <= 3 ; i++)
-    BOTTLE_TRY_FILL (b, i);
-}
-
-static void read (BOTTLE (int) *b)
-{
-  int i;
-  while (BOTTLE_TRY_DRAIN (b, i))
-    printf ("%i\n", i);
-}
-
-int main (void)
-{
-  BOTTLE (int) * fifo = BOTTLE_CREATE (int, UNLIMITED);
-
-  write (fifo);
-  read (fifo);
-
-  BOTTLE_DESTROY (fifo);
-}
-```
 
 **Have fun !**
