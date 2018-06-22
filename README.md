@@ -109,10 +109,7 @@ It would partly unsynchronize threads and uses a larger amount of memory.*
 
 > size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
 
-> size_t **BOTTLE_LEVEL** (BOTTLE (*T*) \*bottle)
-
-`BOTTLE_CAPACITY` returns the capacity of the bottle.
-`BOTTLE_LEVEL` returns the level of the bottle (or `0` for unlimited capacity).
+`BOTTLE_CAPACITY` returns the capacity of the bottle (as defined at creation with `BOTTLE_CREATE`).
 
 ## Exchanging messages between thread
 
