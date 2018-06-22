@@ -401,6 +401,7 @@ using a synchronized thread-safe FIFO message queue.
 When high performance of exchanges is required between threads (more than 100 000 messages per seconds), a buffered bottle is a good choice (reminder: in other cases, an unbuffered bottle is far enough.)
 
 In the following example, this enhance performance by a factor of about 40, because it cuts the concurrency overhead off.
+On my computer (AMD A6 4 cores), it takes about 20 seconds to exchange 25 millions messages between synchronized threads.
 
 ```c
 #include "bottle_impl.h"
@@ -408,7 +409,7 @@ DECLARE_BOTTLE (int)
 DEFINE_BOTTLE (int)
 
 #define NB_MESSAGES 25000000
-#define BUFFER_SIZE 25000
+#define BUFFER_SIZE 1000
 //#define BUFFER_SIZE UNBUFFERED
 
 static size_t LEVEL[2 * NB_MESSAGES];
@@ -418,9 +419,7 @@ static void *eat (void *arg)
 {
   bottle_t (int) * bottle = arg;
   while (bottle_recv (bottle))
-  {
-    LEVEL[nb_c++ + nb_p] = bottle_level (bottle);
-  }
+    LEVEL[nb_c++ + nb_p] = QUEUE_SIZE (bottle->queue);
   return 0;
 }
 
@@ -428,22 +427,14 @@ int
 main (void)
 {
   bottle_t (int) * bottle = bottle_create (int, BUFFER_SIZE);
-
   pthread_t eater;
   pthread_create (&eater, 0, eat, bottle);
 
-  for (size_t i = 0; i < NB_MESSAGES; i++)
-  {
-    if (bottle_send (bottle))
-      LEVEL[nb_c + nb_p++] = bottle_level (bottle);
-    else
-      exit (1);
-  }
-
+  for (size_t i = 0; i < NB_MESSAGES && bottle_send (bottle); i++)
+    LEVEL[nb_c + nb_p++] = QUEUE_SIZE (bottle->queue);
   bottle_close (bottle);
   pthread_join (eater, 0);
   bottle_destroy (bottle);
-
   printf ("%zu messages produced, %zu messages consumed.\n", nb_p, nb_c);
 }
 ```
