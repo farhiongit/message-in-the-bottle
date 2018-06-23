@@ -424,10 +424,10 @@ Comments:
   1. waits for the feeder process to finish.
   1. closes the bottle (`bottle_close` or `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`)
 
-    Closing the bottle in the thread that created it is a good practice:
-    - it protects against the bottle being closed during the transmission phase
-    - it is suitable with the use of several concurrent feeder thread if needed.
-    - it helps keep things easier.
+     Closing the bottle in the thread that created it is a good practice:
+     - it protects against the bottle being closed during the transmission phase
+     - it is suitable with the use of several concurrent feeder thread if needed.
+     - it helps keep things easier.
 
   1. waits for the eater thread to finish (`pthread_join (eater, 0)`)
   1. destroys the bottle (`bottle_destroy` or `BOTTLE_DESTROY`).
