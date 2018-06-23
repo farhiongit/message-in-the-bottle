@@ -134,14 +134,17 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 The receivers can receive messages (draining form the tap), as long as the bottle is not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
 
 - `BOTTLE_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if there is no data to receive and the bottle was
-       closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
 
     This condition (returned value equal to 0 and `errno` equal to `ECONNABORTED`) should be handled
     by the eaters and stop the reception of any data from the bottle.
 
 - If there is data to receive, `BOTTLE_DRAIN` receives a *message* from the bottle
-  (it modifies the value of the second argument *message*) and returns 1.
-- Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` blocks
+  (it modifies the value of the second argument *message* passed by *"reference"* and returns 1.
+
+  Messages are received in the **exact order** they have been sent, whatever the capacity of the buffer defined by `BOTTLE_CREATE`.
+
+- Otherwise (there is no data to receive and the bottle is not closed), `BOTTLE_DRAIN` waits
   until there is data to receive.
 
 Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle.
@@ -158,22 +161,23 @@ and the botlle is not closed.
 
 - `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
-    - immediately without blocking if the bottle was closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
-    - after unblocking immediately when the bottle is closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    - immediately, without waiting, if the bottle was closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
+    - as soon as the bottle is closed (by `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`).
 
-      This most probably indicates an error in the user program as it should be avoided to close a bottle
+      This most probably indicates an error in the logic of the user program as it should be avoided to close a bottle
       while senders are still using it.
 
       Anyhow, this condition (returned value equal to 0 and `errno` equal to `ECONNABORTED`) should be handled
-      by the feeders and stop the transmission of any data to the bottle.
+      by the senders and stop the transmission of any data to the bottle.
 
-- `BOTTLE_FILL` blocks in those cases:
+- `BOTTLE_FILL` waits in those cases:
 
     - If the bottle was plugged (by `BOTTLE_PLUG`).
     - If the message queue is unbuffered, `BOTTLE_FILL` blocks until some receiver has received
     the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
     - If it is buffered and the buffer is full, `BOTTLE_FILL` blocks until some receiver has retrieved a value
     (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
+
 
 - In other cases, `BOTTLE_FILL` sends the message in the bottle and returns 1.
 
@@ -187,10 +191,13 @@ the user program must respect those simple rules:
 
 - The **sender**:
 
-    - *must* allocate resources of the message before sending it
-      (i.e. before the call to functions `BOTTLE_FILL` or `BOTTLE_TRY_FILL`);
-    - *should not* access those allocated ressources after the message has been sent. Indeed, from this point,
+    - *must* allocate resources of the message before sending it (i.e. before the call to functions `BOTTLE_FILL` or `BOTTLE_TRY_FILL`);
+
+    - *should not* try to access those allocated ressources after the message has been sent (i.e. after the call to functions `BOTTLE_FILL` or `BOTTLE_TRY_FILL`).
+
+    Indeed, from this point,
       the message is owned by the receiver (which could modify it) and does not belong to the sender anymore.
+
 
 - The **receiver** *must*, after receiving a message
   (i.e. after the call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`), and after use of the message,
@@ -200,19 +207,22 @@ the user program must respect those simple rules:
 
 > void **BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY** (BOTTLE (*T*) \*bottle)
 
-When concurrent threads are synchronized by an exchange of messages, the transmitter must inform receivers
-when it has finished sending messages, so that receivers won't need to wait for extra messages.
+When concurrent threads are synchronized by an exchange of messages, the senders must inform the receivers
+when they have finished sending messages, so that receivers won't need to wait for extra messages.
 
-Once the bottle won't be filled with any more messages, we can close it:
-the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` will seal the mouth of the bottle
+In other words, as soon as all messages have been sent through the bottle (it won't be filled with any more messages), we can close it.
+
+To do so,
+the function `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` seals the mouth of the bottle
 (i.e. close the transmitter side of the bottle),
 unblock all receivers and wait for the bottle to be empty.
-This:
+
+This behavior:
 
 1. prevents any new message from being sent in the bottle (just in case) :
   `BOTTLE_FILL` and `BOTTLE_TRY_FILL` will return 0 immediately (without blocking).
 2. waits for the bottle to be emptied (by the calls to `BOTTLE_DRAIN` in the receivers).
-3. asks for any blocked `BOTTLE_DRAIN` calls (called by the receivers) to unblock and to finish their job:
+3. asks for any remaining blocked calls to `BOTTLE_DRAIN` (called by the receivers) to unblock and to finish their job:
   `BOTTLE_DRAIN` will be asked to return immediately with value 0.
 
 `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`:
@@ -227,7 +237,7 @@ This:
 
 After the call to `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`, eaters are still able to (and *should*) process the remaining messages in the bottle to avoid any memory leak due to unprocessed remaining messages.
 
-The user program *must* wait for all the eaters to be finished before destroying the bottle.
+The user program *must* wait for `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` to return before destroying the bottle (with `BOTTLE_DESTROY`).
 
 As said above, `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` is *only useful when the bottle is used to synchronize concurrent
 threads* and need not be used in other cases (thread-safe shared FIFO queue).
@@ -315,6 +325,8 @@ DECLARE_BOTTLE (Message)        // Declares the usage of bottles for the user-de
 DEFINE_BOTTLE (Message)         // Defines the usage of bottles for the user-defined type.
 ```
 
+Note the unneeded trailing `;` after `DECLARE_BOTTLE` and `DEFINE_BOTTLE`.
+
 ## Source files
 
 - [`bottle.h`](bottle.h) declares the user interface documented here (about 100 lines of source code).
@@ -337,54 +349,88 @@ It uses the C-like style.
 #include <stdio.h>
 
 #include "bottle_impl.h"
-typedef const char * Message;
+typedef const char *Message;
 DECLARE_BOTTLE (Message)        // Declares the template for type 'Message' (note, no trailing ';')
 DEFINE_BOTTLE (Message)         // Defines the template for type 'Message' (note, no trailing ';')
 
 static void *
 eat (void *arg)                 // The thread that receives the messages
 {
-  Message m;
   bottle_t (Message) * bottle = arg;
+  Message m;
   while (bottle_recv (bottle, m))
     printf ("%s\n", m);
   return 0;
 }
 
-int
-main (void)                     // The (main) thread that creates the bottle, and sends the messages
+static void *
+feed (void *arg)
 {
-  bottle_t (Message) * bottle = bottle_create (Message);
-
-  pthread_t eater;
-  pthread_create (&eater, 0, eat, bottle);
-
+  bottle_t (Message) * bottle = arg;
   Message police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
   for (size_t i = 0; i < 2 * sizeof (police) / sizeof (*police); i++)
   {
     bottle_send (bottle, police[i / 2]);
     sleep (1);
   }
+  return 0;
+}
 
-  bottle_close (bottle);        // Tell the receiver thread that the sending thread has finished sending messages
-  pthread_join (eater, 0);      // Wait for the receiver thread to finish its work (it uses the bottle).
-  bottle_destroy (bottle);      // Destroy the bottle once both threads are over.
+int
+main (void)                     // The (main) thread that creates the bottle
+{
+  bottle_t (Message) * bottle = bottle_create (Message);
+
+  pthread_t eater;
+  pthread_create (&eater, 0, eat, bottle);
+
+#ifndef FEEDER_THREAD           // Option 1: the sender is in the same thread as the one that created it.
+
+  feed (bottle);
+
+#else                           // Option 2: the sender is in a dedicated thread.
+
+  pthread_t feeder;
+  pthread_create (&feeder, 0, feed, bottle);
+
+  pthread_join (feeder, 0);     // Waits for the sender to finish.
+
+#endif
+
+  bottle_close (bottle);        // Tells the receiver thread that the sending thread has finished sending messages
+  pthread_join (eater, 0);      // Waits for the receiver thread to finish its work (it uses the bottle).
+  bottle_destroy (bottle);      // Destroys the bottle once both threads are over.
 }
 ```
 
 Comments:
 
-- A bottle is created (`bottle_create` or `BOTTLE_CREATE`) to communicate synchronously between two threads, a transmitter and a receiver:
+- A bottle is created (`bottle_create` or `BOTTLE_CREATE`) to communicate synchronously between two threads, a sender and a receiver:
   it is a template container which type is `bottle_t (Message)` or `BOTTLE (Message)`, where `Message` is a user-defined type.
+
 - The `eat` function (the receiver which calls `bottle_recv` or `BOTTLE_DRAIN`) is in one thread `eater` (but there could be several),
-  which pace is synchronized with the transmitter.
+  which pace is synchronized with the sender.
+
   That's what it's all about: synchonizing threads with messages !
-- The sending loop (the transmitter which calls `bottle_send` or `BOTTLE_FILL`) is in the same thread (here the `main` thread)
-  as the one which has created the bottle.
-  This protects against the bottle being closed during the transmission phase. This is a good practice as it helps keep things easier.
-- The program closes the bottle (`bottle_close` or `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`)
-  and waits for the eater thread to finish (`pthread_join (eater, 0)`)
-  before destroying the bottle (`bottle_destroy` or `BOTTLE_DESTROY`).
+
+- The sending loop (in the sender function `feed` which calls `bottle_send` or `BOTTLE_FILL`) is:
+  - either in the same thread (here the `main` thread)
+  as the one which created the bottle
+  - or in an alternate dedicated thread (when compiled with option `FEEDER_THREAD`).
+
+
+- The thread that created the bottle:
+
+  1. waits for the feeder process to finish.
+  1. closes the bottle (`bottle_close` or `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`)
+
+    Closing the bottle in the thread that created it is a good practice:
+    - it protects against the bottle being closed during the transmission phase
+    - it is suitable with the use of several concurrent feeder thread if needed.
+    - it helps keep things easier.
+
+  1. waits for the eater thread to finish (`pthread_join (eater, 0)`)
+  1. destroys the bottle (`bottle_destroy` or `BOTTLE_DESTROY`).
 
 ### Advanced example
 
@@ -397,7 +443,7 @@ using a synchronized thread-safe FIFO message queue.
 
 When high performance of exchanges is required between threads (more than 100 000 messages per seconds), a buffered bottle is a good choice (reminder: in other cases, an unbuffered bottle is far enough.)
 
-In the following example, this enhance performance by a factor of about 40, because it cuts the concurrency overhead off.
+In the following example, this enhances performance by a factor of about 40, because it cuts off the concurrency overhead.
 On my computer (AMD A6 4 cores), it takes about 20 seconds to exchange 25 millions messages between synchronized threads.
 
 ```c

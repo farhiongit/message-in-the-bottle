@@ -151,8 +151,6 @@
       ASSERT (!pthread_cond_signal (&self->not_empty));        \
       ret = 1;                                                 \
     }                                                          \
-    else if (!self->frozen)                                    \
-      ASSERT (0);                                              \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     return ret;                                                \
   }                                                            \
@@ -199,8 +197,6 @@
     }                                                          \
     else if (self->closed)                                     \
       errno = ECONNABORTED;                                    \
-    else                                                       \
-      ASSERT (0);                                              \
     ASSERT (!pthread_mutex_unlock (&self->mutex));             \
     return ret;                                                \
   }                                                            \
