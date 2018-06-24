@@ -61,11 +61,6 @@ enum { UNBUFFERED = 1 };
     void (*Destroy) (struct _BOTTLE_##TYPE *self);                \
   } _BOTTLE_VTABLE_##TYPE;                                        \
 \
-  struct _elem_##TYPE  {                    \
-    TYPE v;                                 \
-    struct _elem_##TYPE *next;              \
-  };                                        \
-\
   typedef struct _BOTTLE_##TYPE             \
   {                                         \
     struct _queue_##TYPE {                  \
@@ -88,6 +83,9 @@ enum { UNBUFFERED = 1 };
 
 #define BOTTLE( TYPE ) \
   BOTTLE_##TYPE
+
+#define SMART_BOTTLE( TYPE ) \
+  __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE
 
 /// BOTTLE (T) * BOTTLE_CREATE (T, [size_t capacity = UNBUFFERED])
 #define BOTTLE_CREATE1( TYPE ) \
@@ -156,6 +154,7 @@ enum { UNBUFFERED = 1 };
 /// A more C like syntax
 
 #define bottle_t(type)            BOTTLE(type)
+#define smart_bottle_t(type)      SMART_BOTTLE(type)
 #define bottle_create(...)        BOTTLE_CREATE(__VA_ARGS__)
 #define bottle_send(...)          BOTTLE_FILL(__VA_ARGS__)
 #define bottle_try_send(...)      BOTTLE_TRY_FILL(__VA_ARGS__)

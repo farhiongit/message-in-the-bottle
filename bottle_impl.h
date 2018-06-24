@@ -242,5 +242,10 @@
     QUEUE_DISPOSE_##TYPE (&self->queue);                       \
     free (self);                                               \
   }                                                            \
+\
+  static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE **self)     \
+  {                                                            \
+     if (*self) BOTTLE_DESTROY (*self);                        \
+  }                                                            \
 
 #endif
