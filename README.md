@@ -453,11 +453,12 @@ Comments:
 
      `bottle_t (Message) * bottle = bottle_create (Message);`
 
-  can be replaced by:
+  could optionnaly be replaced by:
 
      `smart_bottle_t (Message) * bottle = bottle_create (Message);`
 
   and the final call to `bottle_destroy` can be removed.
+  The *smart* `bottle` will be automatically deallocated when going out of scope.
 
 ### Advanced example
 
