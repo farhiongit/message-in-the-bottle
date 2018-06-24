@@ -451,11 +451,11 @@ Comments:
 
 - When compiling with `gcc` and `clang`, the declaration
 
-     bottle_t (Message) * bottle = bottle_create (Message);
+     `bottle_t (Message) * bottle = bottle_create (Message);`
 
   can be replaced by:
 
-     smart_bottle_t (Message) * bottle = bottle_create (Message);
+     `smart_bottle_t (Message) * bottle = bottle_create (Message);`
 
   and the final call to `bottle_destroy` can be removed.
 
