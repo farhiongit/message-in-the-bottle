@@ -80,12 +80,10 @@ enum { UNBUFFERED = 1 };
   } BOTTLE_##TYPE;                          \
 \
   BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE( size_t capacity );  \
+  struct __useless_struct_to_allow_trailing_semicolon__
 
 #define BOTTLE( TYPE ) \
   BOTTLE_##TYPE
-
-#define SMART_BOTTLE( TYPE ) \
-  __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE
 
 /// BOTTLE (T) * BOTTLE_CREATE (T, [size_t capacity = UNBUFFERED])
 #define BOTTLE_CREATE1( TYPE ) \
@@ -154,7 +152,6 @@ enum { UNBUFFERED = 1 };
 /// A more C like syntax
 
 #define bottle_t(type)            BOTTLE(type)
-#define smart_bottle_t(type)      SMART_BOTTLE(type)
 #define bottle_create(...)        BOTTLE_CREATE(__VA_ARGS__)
 #define bottle_send(...)          BOTTLE_FILL(__VA_ARGS__)
 #define bottle_try_send(...)      BOTTLE_TRY_FILL(__VA_ARGS__)
@@ -166,5 +163,11 @@ enum { UNBUFFERED = 1 };
 #define bottle_is_closed(self)    BOTTLE_IS_CLOSED(self)
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)
+
+#if defined(__GNUC__) || defined(__clang__)
+#define SMART_BOTTLE( TYPE ) \
+  __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE
+#define smart_bottle_t(type)      SMART_BOTTLE(type)
+#endif
 
 #endif

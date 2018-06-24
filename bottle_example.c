@@ -16,10 +16,8 @@ typedef struct
 } Point;
 
 // Declare and define use of bottles for type Point.
-/* *INDENT-OFF* */
-DECLARE_BOTTLE (Point)
-DEFINE_BOTTLE (Point)
-/* *INDENT-ON*  */
+DECLARE_BOTTLE (Point);
+DEFINE_BOTTLE (Point);
 
 static int
 process_message (Point p)

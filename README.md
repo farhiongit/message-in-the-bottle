@@ -38,6 +38,7 @@ Those two are strictly equivalent:
 |-|---------------------|-------------------------------------|-------------|
 |**Declaration**        |
 ||Type                  | `BOTTLE(`*T*`)`                     | `bottle_t(`*T*`)`
+||Smart type            | `SMART_BOTTLE(`*T*`)`               | `smart_bottle_t(`*T*`)`
 |**Life cycle**         |
 ||Create                | `BOTTLE_CREATE`                     | `bottle_create`
 ||Destroy               | `BOTTLE_DESTROY`                    | `bottle_destroy`
@@ -58,7 +59,7 @@ The following text uses the macro-like style but the equivalent C-like style can
 
 ## Creation of a bottle
 
-> BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])`
+> BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
 >
 > *The second argument is optional and defaults to `UNBUFFERED` (see below).*
 
@@ -72,7 +73,22 @@ For instance, to create a message queue *b* for exchanging integers between thre
 
 `BOTTLE (int) *b = BOTTLE_CREATE (int);`
 
-The message queue is **a strongly typed** (yes, it is a hand-made template container) FIFO queue.
+The message queue is **a strongly typed** (it is a hand-made template container) FIFO queue.
+
+### Self-destruction
+
+> SMART_BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
+>
+> *The second argument is optional and defaults to `UNBUFFERED` (see below).*
+
+If the bottle is declared as a `SMART_BOTTLE (`*T*`)` rather than a `BOTTLE (`*T*`)`,
+then the bottle will be automatically deallocated when it goes out of scope.
+The later call to `BOTTLE_DESTROY` is not necessary (and even forbidden).
+
+This declarator `SMART_BOTTLE (`*T*`)` can only be applied to auto function scope variables;
+it may not be applied to parameters or variables with static storage duration.
+
+Note: This feature is available with compilers `clang` and `gcc` (it makes use of the extension variable attribute `cleanup`.)
 
 ### Unbuffered message queue
 
@@ -249,10 +265,14 @@ threads* and need not be used in other cases (thread-safe shared FIFO queue).
 Thereafter, once *all the receivers are done* in the user program, and the bottle is not needed anymore,
 it can be destroyed safely with `BOTTLE_DESTROY`.
 
-Note that `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
-ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
-and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice),
-otherwise, some thread resources might not be released properly (mutexes and conditions).
+Notes:
+
+- If the bottle was previously declared as a `SMART_BOTTLE (`*T*`)` rather than a `BOTTLE (`*T*`)`,
+  then the bottle will be automatically deallocated when it goes out of scope.
+  The call to `BOTTLE_DESTROY` is not necessary (and even forbidden).
+- `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
+  ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
+  and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice).
 
 ## Other features
 
@@ -321,11 +341,9 @@ For instance, to exchange message texts between threads:
 ```c
 #include "bottle_impl.h"
 typedef const char * Message;   // A user-defined type of messages.
-DECLARE_BOTTLE (Message)        // Declares the usage of bottles for the user-defined type.
-DEFINE_BOTTLE (Message)         // Defines the usage of bottles for the user-defined type.
+DECLARE_BOTTLE (Message);       // Declares the usage of bottles for the user-defined type.
+DEFINE_BOTTLE (Message);        // Defines the usage of bottles for the user-defined type.
 ```
-
-Note the unneeded trailing `;` after `DECLARE_BOTTLE` and `DEFINE_BOTTLE`.
 
 ## Source files
 
@@ -350,8 +368,8 @@ It uses the C-like style.
 
 #include "bottle_impl.h"
 typedef const char *Message;
-DECLARE_BOTTLE (Message)        // Declares the template for type 'Message' (note, no trailing ';')
-DEFINE_BOTTLE (Message)         // Defines the template for type 'Message' (note, no trailing ';')
+DECLARE_BOTTLE (Message);       // Declares the template for type 'Message'
+DEFINE_BOTTLE (Message);        // Defines the template for type 'Message'
 
 static void *
 eat (void *arg)                 // The thread that receives the messages
@@ -392,7 +410,6 @@ main (void)                     // The (main) thread that creates the bottle
 
   pthread_t feeder;
   pthread_create (&feeder, 0, feed, bottle);
-
   pthread_join (feeder, 0);     // Waits for the sender to finish.
 
 #endif
@@ -432,6 +449,16 @@ Comments:
   1. waits for the eater thread to finish (`pthread_join (eater, 0)`)
   1. destroys the bottle (`bottle_destroy` or `BOTTLE_DESTROY`).
 
+- When compiling with `gcc` and `clang`, the declaration
+
+     bottle_t (Message) * bottle = bottle_create (Message);
+
+  can be replaced by:
+
+     smart_bottle_t (Message) * bottle = bottle_create (Message);
+
+  and the final call to `bottle_destroy` can be removed.
+
 ### Advanced example
 
 [`bottle_example.c`](bottle_example.c) is a complete example of a program (compile with option `-pthread`)
@@ -448,8 +475,8 @@ On my computer (AMD A6 4 cores), it takes about 20 seconds to exchange 25 millio
 
 ```c
 #include "bottle_impl.h"
-DECLARE_BOTTLE (int)
-DEFINE_BOTTLE (int)
+DECLARE_BOTTLE (int);
+DEFINE_BOTTLE (int);
 
 #define NB_MESSAGES 25000000
 #define BUFFER_SIZE 1000
@@ -490,8 +517,8 @@ Tokens can be managed with a buffered bottle, in this very naive model:
 #include <stdio.h>
 #include "bottle_impl.h"
 typedef int Token;
-DECLARE_BOTTLE (Token)
-DEFINE_BOTTLE (Token)
+DECLARE_BOTTLE (Token);
+DEFINE_BOTTLE (Token);
 
 #define PRINT_TOKEN printf (" (%lu/%lu).\n", QUEUE_SIZE((tokens_in_use)->queue), BOTTLE_CAPACITY (tokens_in_use))
 #define GET_TOKEN   printf ("Token requested: %s", BOTTLE_TRY_FILL (tokens_in_use) ? "OK" : "NOK")

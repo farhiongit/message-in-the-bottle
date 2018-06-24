@@ -243,9 +243,9 @@
     free (self);                                               \
   }                                                            \
 \
-  static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE **self)     \
+  __attribute__ ((__unused__)) static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE **self)     \
   {                                                            \
      if (*self) BOTTLE_DESTROY (*self);                        \
   }                                                            \
-
+  struct __useless_struct_to_allow_trailing_semicolon__
 #endif
