@@ -230,8 +230,8 @@
     ASSERT (!pthread_cond_broadcast (&self->not_empty));       \
     ASSERT (!pthread_cond_broadcast (&self->not_full));        \
   }                                                            \
-\
-  static void BOTTLE_DESTROY_##TYPE (BOTTLE_##TYPE *self)      \
+  \
+  static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE *self)      \
   {                                                            \
     ASSERT (!pthread_mutex_lock (&self->mutex));               \
     self->closed = 1;                                          \
@@ -240,12 +240,12 @@
     pthread_cond_destroy (&self->not_empty);                   \
     pthread_cond_destroy (&self->not_full);                    \
     QUEUE_DISPOSE_##TYPE (&self->queue);                       \
-    free (self);                                               \
   }                                                            \
 \
-  __attribute__ ((__unused__)) static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE **self)     \
+  static void BOTTLE_DESTROY_##TYPE (BOTTLE_##TYPE *self)      \
   {                                                            \
-     if (*self) BOTTLE_DESTROY (*self);                        \
+    BOTTLE_CLEANUP_##TYPE (self);                              \
+    free (self);                                               \
   }                                                            \
   struct __useless_struct_to_allow_trailing_semicolon__
 #endif

@@ -164,10 +164,4 @@ enum { UNBUFFERED = 1 };
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)
 
-#if defined(__GNUC__) || defined(__clang__)
-#define SMART_BOTTLE( TYPE ) \
-  __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE
-#define smart_bottle_t(type)      SMART_BOTTLE(type)
-#endif
-
 #endif

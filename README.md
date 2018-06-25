@@ -38,7 +38,6 @@ Those two are strictly equivalent:
 |-|---------------------|-------------------------------------|-------------|
 |**Declaration**        |
 ||Type                  | `BOTTLE(`*T*`)`                     | `bottle_t(`*T*`)`
-||Smart type            | `SMART_BOTTLE(`*T*`)`               | `smart_bottle_t(`*T*`)`
 |**Life cycle**         |
 ||Create                | `BOTTLE_CREATE`                     | `bottle_create`
 ||Destroy               | `BOTTLE_DESTROY`                    | `bottle_destroy`
@@ -74,21 +73,6 @@ For instance, to create a message queue *b* for exchanging integers between thre
 `BOTTLE (int) *b = BOTTLE_CREATE (int);`
 
 The message queue is **a strongly typed** (it is a hand-made template container) FIFO queue.
-
-### Self-destruction
-
-> SMART_BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
->
-> *The second argument is optional and defaults to `UNBUFFERED` (see below).*
-
-If the bottle is declared as a `SMART_BOTTLE (`*T*`)` rather than a `BOTTLE (`*T*`)`,
-then the bottle will be automatically deallocated when it goes out of scope.
-The later call to `BOTTLE_DESTROY` is not necessary (and even forbidden).
-
-This declarator `SMART_BOTTLE (`*T*`)` can only be applied to auto function scope variables;
-it may not be applied to parameters or variables with static storage duration.
-
-Note: This feature is available with compilers `clang` and `gcc` (it makes use of the extension variable attribute `cleanup`.)
 
 ### Unbuffered message queue
 
@@ -266,13 +250,9 @@ Thereafter, once *all the receivers are done* in the user program, and the bottl
 it can be destroyed safely with `BOTTLE_DESTROY`.
 
 Notes:
-
-- If the bottle was previously declared as a `SMART_BOTTLE (`*T*`)` rather than a `BOTTLE (`*T*`)`,
-  then the bottle will be automatically deallocated when it goes out of scope.
-  The call to `BOTTLE_DESTROY` is not necessary (and even forbidden).
-- `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
-  ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
-  and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice).
+`BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
+ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
+and `BOTTLE_DESTROY` (usually, waiting for the receivers to finish with a `pthread_join` might suffice).
 
 ## Other features
 
@@ -448,17 +428,6 @@ Comments:
 
   1. waits for the eater thread to finish (`pthread_join (eater, 0)`)
   1. destroys the bottle (`bottle_destroy` or `BOTTLE_DESTROY`).
-
-- When compiling with `gcc` and `clang`, the declaration
-
-     `bottle_t (Message) * bottle = bottle_create (Message);`
-
-  could optionnaly be replaced by:
-
-     `smart_bottle_t (Message) * bottle = bottle_create (Message);`
-
-  and the final call to `bottle_destroy` can be removed.
-  The *smart* `bottle` will be automatically deallocated when going out of scope.
 
 ### Advanced example
 
