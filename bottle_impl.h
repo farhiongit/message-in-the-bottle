@@ -110,19 +110,24 @@
     return 1;                                                  \
   }                                                            \
 \
-  BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE( size_t capacity ) \
+  void BOTTLE_INIT_##TYPE (BOTTLE_##TYPE *self, size_t capacity) \
+  {                                                      \
+    self->vtable = &BOTTLE_VTABLE_##TYPE;                \
+    self->closed = 0;                                    \
+    self->frozen = 0;                                    \
+    self->__dummy__ = __dummy__##TYPE;                   \
+    ASSERT (!pthread_mutex_init (&self->mutex, 0));      \
+    ASSERT (!pthread_cond_init (&self->not_empty, 0));   \
+    ASSERT (!pthread_cond_init (&self->not_full, 0));    \
+    QUEUE_INIT_##TYPE (&self->queue, capacity);          \
+  }                                                      \
+\
+  BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE (size_t capacity)  \
   {                                                      \
     BOTTLE_##TYPE *b = malloc( sizeof( *b ) );           \
     ASSERT (b);                                          \
                                                          \
-    b->vtable = &BOTTLE_VTABLE_##TYPE;                   \
-    b->closed = 0;                                       \
-    b->frozen = 0;                                       \
-    b->__dummy__ = __dummy__##TYPE;                      \
-    ASSERT (!pthread_mutex_init (&b->mutex, 0));         \
-    ASSERT (!pthread_cond_init (&b->not_empty, 0));      \
-    ASSERT (!pthread_cond_init (&b->not_full, 0));       \
-    QUEUE_INIT_##TYPE (&b->queue, capacity);             \
+    BOTTLE_INIT_##TYPE (b, capacity);                    \
                                                          \
     return b;                                            \
   }                                                      \
