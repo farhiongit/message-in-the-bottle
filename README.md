@@ -115,9 +115,9 @@ It would partly unsynchronize threads and uses a larger amount of memory.*
 
 Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can be declared and initialized with `BOTTLE_INIT`.
 
-> **BOTTLE_INIT** (*T*, *variable name*, [size_t capacity = UNBUFFERED])
+> **BOTTLE_DECL** (*T*, *variable name*, [size_t capacity = UNBUFFERED])
 >
-> `BOTTLE_INIT` can only be applied to auto function scope variables; it may not be applied to parameters or variables
+> `BOTTLE_DECL` can only be applied to auto function scope variables; it may not be applied to parameters or variables
 > with static storage duration.
 >
 > This functionality is only available with compilers `gcc` and `clang`.
@@ -134,7 +134,7 @@ DEFINE_BOTTLE (time_t);
 
 int main (void)
 {
-  BOTTLE_DECL (time_t, b);       // Declares an automatic variable b of type bottle_t
+  BOTTLE_DECL (time_t, b);       // Declares an automatic variable b of type bottle_t (time_t)
   bottle_send (&b, time (0));
   time_t val;
   bottle_recv (&b, val);
