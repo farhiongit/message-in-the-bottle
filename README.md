@@ -113,14 +113,14 @@ It would partly unsynchronize threads and uses a larger amount of memory.*
 
 ### Automatic variable
 
-Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can be declared and initialized with `BOTTLE_INIT`.
+Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can be declared and initialized with `BOTTLE_DECL`.
 
 > **BOTTLE_DECL** (*T*, *variable name*, [size_t capacity = UNBUFFERED])
 >
 > `BOTTLE_DECL` can only be applied to auto function scope variables; it may not be applied to parameters or variables
 > with static storage duration.
->
-> This functionality is only available with compilers `gcc` and `clang`.
+
+Note: This functionality is only available with compilers `gcc` and `clang` as it makes use of the variable attribute `cleanup`.
 
 Here is an example. The variable *b* is declared as a `bottle_t (time_t)` and initialized for usage.
 It is destroyed when the variable goes out of scope.
