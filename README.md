@@ -62,13 +62,13 @@ The following text uses the macro-like style but the equivalent C-like style can
 >
 > *The second argument is optional and defaults to `UNBUFFERED` (see below).*
 
-To transport messages of type *T*, just create a message queue with:
+To transport messages of type *T*, just create a pointer to a message queue with:
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `);`
 
 *T* could be any standard or user defined (`typedef`) type, simple or composed structure (`struct`).
 
-For instance, to create a message queue *b* for exchanging integers between threads, use:
+For instance, to create a pointer to a message queue *b* for exchanging integers between threads, use:
 
 `BOTTLE (int) *b = BOTTLE_CREATE (int);`
 
@@ -89,7 +89,7 @@ Even if unbuffred queues are efficient in most cases, buffered queues can be nee
   where context switch overhead between threads would be counter-productive. The buffer capacity will allow to process
   sending and receiving messages by chunks, therefore reducing the number of context switch.
 
-To create a buffered message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
+To create a pointer to a **buffered** message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `, ` *capacity* `);`
 
@@ -110,6 +110,37 @@ It would partly unsynchronize threads and uses a larger amount of memory.*
 > size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
 
 `BOTTLE_CAPACITY` returns the capacity of the bottle (as defined at creation with `BOTTLE_CREATE`).
+
+### Automatic variable
+
+Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can be declared and initialized with `BOTTLE_INIT`.
+
+> **BOTTLE_INIT** (*T*, *variable name*, [size_t capacity = UNBUFFERED])
+>
+> `BOTTLE_INIT` can only be applied to auto function scope variables; it may not be applied to parameters or variables
+> with static storage duration.
+>
+> This functionality is only available with compilers `gcc` and `clang`.
+
+Here is an example. The variable *b* is declared as a `bottle_t (time_t)` and initialized for usage.
+It is destroyed when the variable goes out of scope.
+
+```c
+#include <time.h>
+#include "bottle_impl.h"
+
+DECLARE_BOTTLE (time_t);
+DEFINE_BOTTLE (time_t);
+
+int main (void)
+{
+  BOTTLE_DECL (time_t, b);       // Declares an automatic variable b of type bottle_t
+  bottle_send (&b, time (0));
+  time_t val;
+  bottle_recv (&b, val);
+  // b is deallocated automatically when going out of scope.
+}
+```
 
 ## Exchanging messages between thread
 
@@ -490,13 +521,13 @@ typedef int Token;
 DECLARE_BOTTLE (Token);
 DEFINE_BOTTLE (Token);
 
-#define PRINT_TOKEN printf (" (%lu/%lu).\n", QUEUE_SIZE((tokens_in_use)->queue), BOTTLE_CAPACITY (tokens_in_use))
-#define GET_TOKEN   printf ("Token requested: %s", BOTTLE_TRY_FILL (tokens_in_use) ? "OK" : "NOK")
-#define LET_TOKEN   printf ("Token released:  %s", BOTTLE_TRY_DRAIN (tokens_in_use) ? "OK" : "NOK")
+#define PRINT_TOKEN printf (" (%lu/%lu).\n", QUEUE_SIZE((tokens_in_use).queue), BOTTLE_CAPACITY (&tokens_in_use))
+#define GET_TOKEN   printf ("Token requested: %s", BOTTLE_TRY_FILL (&tokens_in_use) ? "OK" : "NOK")
+#define LET_TOKEN   printf ("Token released:  %s", BOTTLE_TRY_DRAIN (&tokens_in_use) ? "OK" : "NOK")
 
 int main (void)
 {
-  BOTTLE (Token) * tokens_in_use = BOTTLE_CREATE (Token, 3);
+  BOTTLE_DECL (Token, tokens_in_use, 3);
 
   GET_TOKEN ; PRINT_TOKEN ;
   GET_TOKEN ; PRINT_TOKEN ;
@@ -507,8 +538,6 @@ int main (void)
   LET_TOKEN ; PRINT_TOKEN ;
 
   GET_TOKEN ; PRINT_TOKEN ;
-
-  BOTTLE_DESTROY (tokens_in_use);
 }
 ```
 

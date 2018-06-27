@@ -87,7 +87,7 @@ enum { UNBUFFERED = 1 };
 
 /// BOTTLE (T) * BOTTLE_CREATE (T, [size_t capacity = UNBUFFERED])
 #define BOTTLE_CREATE1( TYPE ) \
-  BOTTLE_CREATE_##TYPE(1)
+  BOTTLE_CREATE_##TYPE(UNBUFFERED)
 #define BOTTLE_CREATE2( TYPE, capacity ) \
   BOTTLE_CREATE_##TYPE(capacity)
 #define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
@@ -148,6 +148,13 @@ enum { UNBUFFERED = 1 };
 
 /// size_t BOTTLE_CAPACITY (BOTTLE (T) *bottle)
 #define BOTTLE_CAPACITY(self) QUEUE_CAPACITY((self)->queue)
+
+#if defined(__GNUC__) || defined (__clang__)
+#define BOTTLE_DECL3(TYPE, var, capacity)  \
+__attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT_##TYPE (&var, capacity)
+#define BOTTLE_DECL2(TYPE, var) BOTTLE_DECL3(TYPE, var, UNBUFFERED)
+#define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
+#endif
 
 /// A more C like syntax
 
