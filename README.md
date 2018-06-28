@@ -113,14 +113,17 @@ It would partly unsynchronize threads and uses a larger amount of memory.*
 
 ### Automatic variable
 
-Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can be declared and initialized with `BOTTLE_DECL`.
+Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can as well be declared and initialized with `BOTTLE_DECL`.
 
-> **BOTTLE_DECL** (*T*, *variable name*, [size_t capacity = UNBUFFERED])
+> **BOTTLE_DECL** (*variable name*, *T*, [size_t capacity = UNBUFFERED])
 >
 > `BOTTLE_DECL` can only be applied to auto function scope variables; it may not be applied to parameters or variables
 > with static storage duration.
 
-Note: This functionality is only available with compilers `gcc` and `clang` as it makes use of the variable attribute `cleanup`.
+Note:
+
+- `BOTTLE_DECL` is only available with compilers `gcc` and `clang` as it makes use of the variable attribute `cleanup`.
+- `BOTTLE_DECL (b, int, 3)` is similar to what could be `bottle_t<int> b(3)` in C++.
 
 Here is an example. The variable *b* is declared as a `bottle_t (time_t)` and initialized for usage.
 It is destroyed when the variable goes out of scope.
@@ -134,7 +137,7 @@ DEFINE_BOTTLE (time_t);
 
 int main (void)
 {
-  BOTTLE_DECL (time_t, b);       // Declares an automatic variable b of type bottle_t (time_t)
+  BOTTLE_DECL (b, time_t);       // Declares an automatic variable b of type bottle_t (time_t)
   bottle_send (&b, time (0));
   time_t val;
   bottle_recv (&b, val);
@@ -527,7 +530,7 @@ DEFINE_BOTTLE (Token);
 
 int main (void)
 {
-  BOTTLE_DECL (Token, tokens_in_use, 3);
+  BOTTLE_DECL (tokens_in_use, Token, 3);
 
   GET_TOKEN ; PRINT_TOKEN ;
   GET_TOKEN ; PRINT_TOKEN ;

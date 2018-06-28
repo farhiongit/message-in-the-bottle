@@ -150,9 +150,9 @@ enum { UNBUFFERED = 1 };
 #define BOTTLE_CAPACITY(self) QUEUE_CAPACITY((self)->queue)
 
 #if defined(__GNUC__) || defined (__clang__)
-#define BOTTLE_DECL3(TYPE, var, capacity)  \
+#define BOTTLE_DECL3(var, TYPE, capacity)  \
 __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT_##TYPE (&var, capacity)
-#define BOTTLE_DECL2(TYPE, var) BOTTLE_DECL3(TYPE, var, UNBUFFERED)
+#define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, UNBUFFERED)
 #define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
 #endif
 
