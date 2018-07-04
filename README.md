@@ -29,6 +29,47 @@ implement it for my favorite C language.
 
 And here it is.
 
+# Thread synchronization through messages
+
+Threads can synchronize using the producer/consumer pattern. Consumer threads (possibly several) trigger when they receiver
+messages sent by producer threads (possibly several).
+
+Each message is consumed by excatly one consumer thread.
+
+## Unbuffered message queue
+
+The created queue is unbuffered by default.
+Such an unbuffered queue is suitable to synchronize threads running concurrently.
+
+## Buffered message queue
+
+Even if unbuffred queues are efficient in most cases, buffered queues can be needed for instance:
+
+- to limit the number of thread workers,
+- in case of a very high rate (more than 100k per second) of exchanged messages
+  between the sender thread and the receiver thread,
+  where context switch overhead between threads would be counter-productive. The buffer capacity will allow to process
+  sending and receiving messages by chunks, therefore reducing the number of context switch.
+
+An optional positive argument *capacity* can be passed at creation of a bottle (either dynamically or automatically allocated).
+
+- A *capacity* set to a positive integer defines a buffered queue of limited capacity.
+
+    This could be used to manage tokens: *capacity* is then the number of available tokens.
+    Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_TRY_DRAIN` to release a token.
+    The bottle is then used as a container of controlled capacity.
+    `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
+
+- A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
+
+Buffered queues are implemented as preallocated arrays rather than as conventional linked-list:
+elements of the array are reused to transport all messages,
+whereas with a linked list, each message would require a dynamically allocated new element in the list, adding memory management pverhead.
+This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.github.io/disruptor/).
+
+*The usage of buffered queues is neither required nor recommended for thread synchronization.
+It would partly unsynchronize threads and uses a larger amount of memory.*
+
 # Insights of the user interface
 
 The user interface is available in two styles, a macro-like and a C-like style.
@@ -36,9 +77,10 @@ Those two are strictly equivalent:
 
 || Description          |Macro-like style                     | C-like style|
 |-|---------------------|-------------------------------------|-------------|
-|**Declaration**        |
-||Type                  | `BOTTLE(`*T*`)`                     | `bottle_t(`*T*`)`
-|**Life cycle**         |
+||Object Type           | `BOTTLE(`*T*`)`                     | `bottle_t(`*T*`)`
+|**Automatic allocation** |
+||Declare               | `BOTTLE_DECL`                       | `BOTTLE_DECL`
+|**Dynamic allocation** |
 ||Create                | `BOTTLE_CREATE`                     | `bottle_create`
 ||Destroy               | `BOTTLE_DESTROY`                    | `bottle_destroy`
 |**Actions**            |
@@ -56,15 +98,15 @@ Those two are strictly equivalent:
 
 The following text uses the macro-like style but the equivalent C-like style can be used instead.
 
-## Creation of a bottle
+## Dynamic allocation
+
+### Creation of a bottle
 
 > BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
 >
 > *The second argument is optional and defaults to `UNBUFFERED` (see below).*
 
-To transport messages of type *T*, just create a pointer to a message queue with:
-
-`BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `);`
+To transport messages of type *T*, `BOTTLE_CREATE` creates a pointer to a dynamically allocated message queue.
 
 *T* could be any standard or user defined (`typedef`) type, simple or composed structure (`struct`).
 
@@ -74,46 +116,21 @@ For instance, to create a pointer to a message queue *b* for exchanging integers
 
 The message queue is **a strongly typed** (it is a hand-made template container) FIFO queue.
 
-### Unbuffered message queue
-
-The created queue is unbuffered by default.
-Such an unbuffered queue is suitable to synchronize threads running concurrently.
-
-### Buffered message queue
-
-Even if unbuffred queues are efficient in most cases, buffered queues can be needed for instance:
-
-- to limit the number of thread workers,
-- in case of a very high rate (more than 100k per second) of exchanged messages
-  between the sender thread and the receiver thread,
-  where context switch overhead between threads would be counter-productive. The buffer capacity will allow to process
-  sending and receiving messages by chunks, therefore reducing the number of context switch.
-
 To create a pointer to a **buffered** message queue, pass its *capacity* as an optional (positive integer) second argument of `BOTTLE_CREATE` :
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `, ` *capacity* `);`
 
-- A *capacity* set to a positive integer defines a buffered queue of limited capacity.
+### Destruction of a bottle
 
-    This could be used to manage tokens: *capacity* is then the number of available tokens.
-    Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_TRY_DRAIN` to release a token.
-    The bottle is then used as a container of controlled capacity.
-    `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` need not be used in this case.
+> void **BOTTLE_DESTROY** (BOTTLE (*T*) \*bottle)
 
-- A *capacity* set to `UNBUFFERED` defines an unbuffered queue (default).
+Thereafter, once *all the receivers are done* in the user program, and the bottle is not needed anymore,
+it can be destroyed safely with `BOTTLE_DESTROY`.
 
-Buffered queues are implemented as preallocated arrays rather than as conventional linked-list: elements of the array are reused to transport all messages, whereas with a linked list, each message would require a dynamically allocated new element in the list, adding memory management pverhead. This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.github.io/disruptor/).
+## Declaration of local (automatic) variable
 
-*The usage of buffered queues is neither required nor recommended for thread synchronization.
-It would partly unsynchronize threads and uses a larger amount of memory.*
-
-> size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
-
-`BOTTLE_CAPACITY` returns the capacity of the bottle (as defined at creation with `BOTTLE_CREATE`).
-
-### Automatic variable
-
-Rather than creating pointers to bottles, automatic variables of type BOTTLE (*T*) can as well be declared and initialized with `BOTTLE_DECL`.
+Rather than creating pointers to bottles, local variables of type BOTTLE (*T*) can as well be declared and initialized with `BOTTLE_DECL`.
+These varaibles behave like automatic variables: resources are automatically allocated at declaration and deallocated at end of scope.
 
 > **BOTTLE_DECL** (*variable name*, *T*, [size_t capacity = UNBUFFERED])
 >
@@ -276,13 +293,6 @@ The user program *must* wait for `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` to return b
 As said above, `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` is *only useful when the bottle is used to synchronize concurrent
 threads* and need not be used in other cases (thread-safe shared FIFO queue).
 
-## Destruction of a bottle
-
-> void **BOTTLE_DESTROY** (BOTTLE (*T*) \*bottle)
-
-Thereafter, once *all the receivers are done* in the user program, and the bottle is not needed anymore,
-it can be destroyed safely with `BOTTLE_DESTROY`.
-
 Notes:
 `BOTTLE_DESTROY` does not call `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY` by default because the user program *should
 ensure* that all receivers have returned from calls to `BOTTLE_DRAIN` between `BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY`
@@ -337,6 +347,12 @@ The mouth of the bottle can be:
 
 - plugged (stopping communication) with `BOTTLE_PLUG`,
 - unplugged (to restart communication) with `BOTTLE_UNPLUG`.
+
+### Getting the capacity of a bottle
+
+> size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
+
+`BOTTLE_CAPACITY` returns the capacity of the bottle (as defined at creation with `BOTTLE_CREATE`).
 
 ### Hidden data
 
@@ -465,7 +481,7 @@ Comments:
 
 ### Advanced example
 
-[`bottle_example.c`](bottle_example.c) is a complete example of a program (compile with option `-pthread`)
+[`bottle_example.c`](examples/bottle_example.c) is a complete example of a program (compile with option `-pthread`)
 using a synchronized thread-safe FIFO message queue.
 
 ## Buffered bottle
@@ -556,6 +572,9 @@ Token released:  OK (2/3).
 Token requested: OK (3/3).
 ```
 
-Note how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
+Note:
+
+- the use of a local automatic variable `tokens_in_use` declared by `BOTTLE_DECL`,
+- how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
 **Have fun !**
