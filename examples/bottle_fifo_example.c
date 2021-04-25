@@ -18,10 +18,21 @@ static void read (BOTTLE (int) *b)
 
 int main (void)
 {
-  BOTTLE (int) * fifo = BOTTLE_CREATE (int, 10);
+  BOTTLE (int) * fifo;
 
+  fifo = BOTTLE_CREATE (int, 10);
+  printf ("Capacity %zu\n", BOTTLE_CAPACITY (fifo));
   write (fifo);
   read (fifo);
+  printf ("Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  BOTTLE_CLOSE (fifo);
+  BOTTLE_DESTROY (fifo);
 
+  fifo = BOTTLE_CREATE (int, UNLIMITED);
+  printf ("Capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
+  write (fifo);
+  read (fifo);
+  printf ("Capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
+  BOTTLE_CLOSE (fifo);
   BOTTLE_DESTROY (fifo);
 }

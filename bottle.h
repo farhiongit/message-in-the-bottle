@@ -36,18 +36,30 @@
 // To be translated.
 #define TBT(text) (text)
 
-#define ASSERT(cond) \
+#define BOTTLE_ASSERT3(cond, msg, fatal) \
   do {\
     if (!(cond)) \
     {\
-      fprintf(stderr, TBT("Thread %5$#lx: %1$s (condition '%1$s' is false in function %2$s at %3$s:%4$i)\n"),#cond,__func__,__FILE__,__LINE__, pthread_self());\
+      const char* _msg = msg; \
+      if (_msg && *_msg) fprintf(stderr, TBT("%1$s: %2$s"), fatal ? TBT("FATAL ERROR") : TBT("WARNING"), TBT(_msg));\
+      if (fatal) pthread_exit(0) ;\
+    }\
+  } while(0)
+#define BOTTLE_ASSERT(cond) \
+  do {\
+    if (!(cond)) \
+    {\
+      fprintf(stderr, TBT("%6$s: Thread %5$#lx: %1$s (condition '%1$s' is false in function %2$s at %3$s:%4$i)\n"),#cond,__func__,__FILE__,__LINE__, pthread_self(), TBT("FATAL ERROR"));\
       pthread_exit(0) ;\
     }\
   } while(0)
 
-enum { UNBUFFERED = 1 };
+enum { UNLIMITED = 0,
+       UNBUFFERED = 1 /* Default capacity for perfect thread synchronization */, };
 
-#define DECLARE_BOTTLE( TYPE )     \
+typedef int BOTTLE_DUMMY_TYPE;
+
+#define DECLARE_BOTTLE1( TYPE )     \
 \
   struct _BOTTLE_##TYPE;           \
 \
@@ -57,7 +69,7 @@ enum { UNBUFFERED = 1 };
     int  (*TryFill) (struct _BOTTLE_##TYPE *self, TYPE message);  \
     int (*Drain) (struct _BOTTLE_##TYPE *self, TYPE *message);    \
     int (*TryDrain) (struct _BOTTLE_##TYPE *self, TYPE *message); \
-    void (*Dry) (struct _BOTTLE_##TYPE *self);                    \
+    void (*Close) (struct _BOTTLE_##TYPE *self);                  \
     void (*Destroy) (struct _BOTTLE_##TYPE *self);                \
   } _BOTTLE_VTABLE_##TYPE;                                        \
 \
@@ -69,6 +81,7 @@ enum { UNBUFFERED = 1 };
       TYPE* writer_head;                    \
       size_t                size;           \
       size_t                capacity;       \
+      int                   unlimited;      \
     } queue;                                \
     int                          closed;    \
     int                          frozen;    \
@@ -82,14 +95,19 @@ enum { UNBUFFERED = 1 };
   BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE( size_t capacity );  \
   struct __useless_struct_to_allow_trailing_semicolon__
 
-#define BOTTLE( TYPE ) \
-  BOTTLE_##TYPE
+#define DECLARE_BOTTLE0()     DECLARE_BOTTLE1 (BOTTLE_DUMMY_TYPE)
+#define DECLARE_BOTTLE(...)   VFUNC(DECLARE_BOTTLE, __VA_ARGS__)
 
-/// BOTTLE (T) * BOTTLE_CREATE (T, [size_t capacity = UNBUFFERED])
+#define BOTTLE1( TYPE )  BOTTLE_##TYPE
+#define BOTTLE0()        BOTTLE1 (BOTTLE_DUMMY_TYPE)
+#define BOTTLE(...)      VFUNC(BOTTLE, __VA_ARGS__)
+
+/// BOTTLE (T) * BOTTLE_CREATE ([T], [size_t capacity = UNBUFFERED])
 #define BOTTLE_CREATE1( TYPE ) \
-  BOTTLE_CREATE_##TYPE(UNBUFFERED)
+  BOTTLE_CREATE_##TYPE(1)
 #define BOTTLE_CREATE2( TYPE, capacity ) \
   BOTTLE_CREATE_##TYPE(capacity)
+#define BOTTLE_CREATE0() BOTTLE_CREATE1( BOTTLE_DUMMY_TYPE )
 #define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
 
 /// int BOTTLE_FILL (BOTTLE (T) *bottle, [T message])
@@ -122,22 +140,22 @@ enum { UNBUFFERED = 1 };
 
 /// void BOTTLE_PLUG (BOTTLE (T) *bottle)
 #define BOTTLE_PLUG(self)  \
-  do { ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
+  do { BOTTLE_ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
        (self)->frozen = 1 ;                             \
-       ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
+       BOTTLE_ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
      } while(0)
 
 /// void BOTTLE_UNPLUG (BOTTLE (T) *bottle)
 #define BOTTLE_UNPLUG(self)  \
-  do { ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
+  do { BOTTLE_ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
        (self)->frozen = 0 ;                             \
-       ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
-       ASSERT (!pthread_cond_signal (&self->not_full)); \
+       BOTTLE_ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
+       BOTTLE_ASSERT (!pthread_cond_signal (&self->not_full)); \
      } while(0)
 
-/// void BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (BOTTLE (T) *bottle)
-#define BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY(self)  \
-  do { (self)->vtable->Dry ((self)); } while (0)
+/// void BOTTLE_CLOSE (BOTTLE (T) *bottle)
+#define BOTTLE_CLOSE(self)  \
+  do { (self)->vtable->Close ((self)); } while (0)
 
 /// int BOTTLE_IS_CLOSED (BOTTLE (T) *bottle)
 #define BOTTLE_IS_CLOSED(self) ((self)->closed)
@@ -147,27 +165,36 @@ enum { UNBUFFERED = 1 };
   do { (self)->vtable->Destroy ((self)); } while (0)
 
 /// size_t BOTTLE_CAPACITY (BOTTLE (T) *bottle)
-#define BOTTLE_CAPACITY(self) QUEUE_CAPACITY((self)->queue)
+#define BOTTLE_CAPACITY(self) ((self)->queue.unlimited ? 0 : QUEUE_CAPACITY((self)->queue))
 
+/// BOTTLE (T) * BOTTLE_DECL (variable_name, [T], [size_t capacity = UNBUFFERED])
 #if defined(__GNUC__) || defined (__clang__)
 #define BOTTLE_DECL3(var, TYPE, capacity)  \
 __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT_##TYPE (&var, capacity)
-#define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, UNBUFFERED)
+#define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, 1)
+#define BOTTLE_DECL1(var) BOTTLE_DECL2(var, BOTTLE_DUMMY_TYPE)
 #define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
 #endif
 
 /// A more C like syntax
+#define bottle_type_declare(...)  DECLARE_BOTTLE(__VA_ARGS__)
+#define bottle_type_define(...)   DEFINE_BOTTLE(__VA_ARGS__)
 
 #define bottle_t(type)            BOTTLE(type)
 #define bottle_create(...)        BOTTLE_CREATE(__VA_ARGS__)
+#define bottle_auto(...)          BOTTLE_DECL(__VA_ARGS__)
+
 #define bottle_send(...)          BOTTLE_FILL(__VA_ARGS__)
 #define bottle_try_send(...)      BOTTLE_TRY_FILL(__VA_ARGS__)
 #define bottle_recv(...)          BOTTLE_DRAIN(__VA_ARGS__)
 #define bottle_try_recv(...)      BOTTLE_TRY_DRAIN(__VA_ARGS__)
-#define bottle_close(self)        BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY(self)
+
+#define bottle_close(self)        BOTTLE_CLOSE(self)
 #define bottle_destroy(self)      BOTTLE_DESTROY(self)
+
 #define bottle_capacity(self)     BOTTLE_CAPACITY(self)
 #define bottle_is_closed(self)    BOTTLE_IS_CLOSED(self)
+
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)
 

@@ -42,12 +42,12 @@
 #define QUEUE_CAPACITY(queue) ((queue).capacity)
 #define QUEUE_SIZE(queue) ((queue).size)
 
-#define DEFINE_BOTTLE( TYPE )                                                 \
+#define DEFINE_BOTTLE1( TYPE )                                                \
   static int  BOTTLE_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);         \
   static int  BOTTLE_TRY_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);     \
   static int  BOTTLE_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message);       \
   static int  BOTTLE_TRY_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message);   \
-  static void BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY_##TYPE (BOTTLE_##TYPE *self); \
+  static void BOTTLE_CLOSE_##TYPE (BOTTLE_##TYPE *self);                      \
   static void BOTTLE_DESTROY_##TYPE (BOTTLE_##TYPE *self);                    \
   static TYPE __dummy__##TYPE;                                                \
 \
@@ -57,16 +57,16 @@
     BOTTLE_TRY_FILL_##TYPE,                              \
     BOTTLE_DRAIN_##TYPE,                                 \
     BOTTLE_TRY_DRAIN_##TYPE,                             \
-    BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY_##TYPE,            \
+    BOTTLE_CLOSE_##TYPE,                                 \
     BOTTLE_DESTROY_##TYPE,                               \
   };                                                     \
 \
   static void QUEUE_INIT_##TYPE (struct _queue_##TYPE *q, size_t capacity) \
   {                                                            \
-    ASSERT (capacity);                                         \
-    q->capacity = capacity;                                    \
+    q->capacity = (capacity == 0 ? 1 : capacity);              \
+    q->unlimited = (capacity == 0);                            \
     q->size = 0;                                               \
-    ASSERT (q->buffer = malloc (capacity * sizeof (*q->buffer))); \
+    BOTTLE_ASSERT (q->buffer = malloc (q->capacity * sizeof (*q->buffer))); \
     q->reader_head = 0;                                        \
     q->writer_head = q->buffer;                                \
   }                                                            \
@@ -78,7 +78,17 @@
 \
   static int QUEUE_PUSH_##TYPE (struct _queue_##TYPE *q, TYPE message) \
   {                                                            \
-    if (QUEUE_IS_FULL (*q))                                    \
+    if (QUEUE_IS_FULL (*q) && q->unlimited)                    \
+    {                                                          \
+      q->capacity++; /* therefore, q->capacity >= 2 */         \
+      TYPE *oldq = q->buffer;                                  \
+      BOTTLE_ASSERT (q->buffer = realloc (q->buffer, q->capacity * sizeof (*q->buffer))); \
+      q->reader_head = q->buffer + (q->reader_head - oldq) + 1;\
+      q->writer_head = q->buffer + (q->writer_head - oldq);    \
+      for (TYPE* p = q->buffer + q->capacity - 1 ; p >= q->reader_head ; p--) \
+        *p = *(p-1);                                           \
+    }                                                          \
+    else if (QUEUE_IS_FULL (*q))                               \
     {                                                          \
       errno = EPERM;                                           \
       return 0;                                                \
@@ -97,6 +107,9 @@
   {                                                            \
     if (QUEUE_IS_EMPTY (*q))                                   \
     {                                                          \
+      if (q->unlimited)                                        \
+        BOTTLE_ASSERT (q->writer_head = q->buffer =            \
+                       realloc (q->buffer, (q->capacity = 1) * sizeof (*q->buffer))); \
       errno = EPERM;                                           \
       return 0;                                                \
     }                                                          \
@@ -111,21 +124,21 @@
   }                                                            \
 \
   void BOTTLE_INIT_##TYPE (BOTTLE_##TYPE *self, size_t capacity) \
-  {                                                      \
-    self->vtable = &BOTTLE_VTABLE_##TYPE;                \
-    self->closed = 0;                                    \
-    self->frozen = 0;                                    \
-    self->__dummy__ = __dummy__##TYPE;                   \
-    ASSERT (!pthread_mutex_init (&self->mutex, 0));      \
-    ASSERT (!pthread_cond_init (&self->not_empty, 0));   \
-    ASSERT (!pthread_cond_init (&self->not_full, 0));    \
-    QUEUE_INIT_##TYPE (&self->queue, capacity);          \
-  }                                                      \
+  {                                                            \
+    self->vtable = &BOTTLE_VTABLE_##TYPE;                      \
+    self->closed = 0;                                          \
+    self->frozen = 0;                                          \
+    self->__dummy__ = __dummy__##TYPE;                         \
+    BOTTLE_ASSERT (!pthread_mutex_init (&self->mutex, 0));     \
+    BOTTLE_ASSERT (!pthread_cond_init (&self->not_empty, 0));  \
+    BOTTLE_ASSERT (!pthread_cond_init (&self->not_full, 0));   \
+    QUEUE_INIT_##TYPE (&self->queue, capacity);                \
+  }                                                            \
 \
   BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE (size_t capacity)  \
   {                                                      \
     BOTTLE_##TYPE *b = malloc( sizeof( *b ) );           \
-    ASSERT (b);                                          \
+    BOTTLE_ASSERT (b);                                   \
                                                          \
     BOTTLE_INIT_##TYPE (b, capacity);                    \
                                                          \
@@ -135,112 +148,112 @@
   static int BOTTLE_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message) \
   {                                                            \
     int ret = 0;                                               \
-    ASSERT (!pthread_mutex_lock (&self->mutex));               \
+    BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
     if (self->closed)                                          \
     {                                                          \
-      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));    \
       return errno = ECONNABORTED, ret;                        \
     }                                                          \
     while (!self->closed &&                                    \
-           (self->frozen || QUEUE_IS_FULL (self->queue)))      \
-      ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex));   \
-    if (self->closed)                                          \
+           (self->frozen || BOTTLE_IS_FULL (self)))            \
+      BOTTLE_ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex));   \
+    if (self->closed) /* Again. In case the bottle would have been closed while waiting */ \
     {                                                          \
-      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));    \
       return errno = ECONNABORTED, ret;                        \
     }                                                          \
-    if (!self->frozen && !QUEUE_IS_FULL (self->queue))         \
+    else if (!self->frozen && !BOTTLE_IS_FULL (self))          \
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
-      ASSERT (!pthread_cond_signal (&self->not_empty));        \
+      BOTTLE_ASSERT (!pthread_cond_signal (&self->not_empty)); \
       ret = 1;                                                 \
     }                                                          \
-    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
+    else                                                       \
+      BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);  \
+    BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     return ret;                                                \
   }                                                            \
 \
   static int BOTTLE_TRY_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message) \
   {                                                            \
     int ret = 0;                                               \
-    ASSERT (!pthread_mutex_lock (&self->mutex));               \
+    BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
     if (self->closed)                                          \
     {                                                          \
-      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));    \
       return errno = ECONNABORTED, ret;                        \
     }                                                          \
-    if (self->frozen)                                          \
+    else if (self->frozen)                                     \
     {                                                          \
-      ASSERT (!pthread_mutex_unlock (&self->mutex));           \
+      BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));    \
       return errno = EWOULDBLOCK, ret;                         \
     }                                                          \
-    if (!QUEUE_IS_FULL (self->queue))                          \
+    else if (!BOTTLE_IS_FULL (self))                           \
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
-      ASSERT (!pthread_cond_signal (&self->not_empty));        \
+      BOTTLE_ASSERT (!pthread_cond_signal (&self->not_empty)); \
       ret = 1;                                                 \
     }                                                          \
     else                                                       \
       errno = EWOULDBLOCK;                                     \
-    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
+    BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     return ret;                                                \
   }                                                            \
 \
   static int BOTTLE_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message) \
   {                                                            \
     int ret = 0;                                               \
-    ASSERT (!pthread_mutex_lock (&self->mutex));               \
-    while (!self->closed && QUEUE_IS_EMPTY (self->queue))      \
-      ASSERT (!pthread_cond_wait (&self->not_empty, &self->mutex)); \
-    if (!QUEUE_IS_EMPTY (self->queue))                         \
+    BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
+    while (!self->closed && BOTTLE_IS_EMPTY (self))            \
+      BOTTLE_ASSERT (!pthread_cond_wait (&self->not_empty, &self->mutex)); \
+    if (!BOTTLE_IS_EMPTY (self))                               \
     {                                                          \
       QUEUE_POP_##TYPE (&self->queue, message);                \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
-      ASSERT (!pthread_cond_signal (&self->not_full));         \
+      BOTTLE_ASSERT (!pthread_cond_signal (&self->not_full));  \
       ret = 1;                                                 \
     }                                                          \
     else if (self->closed)                                     \
       errno = ECONNABORTED;                                    \
-    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
+    else                                                       \
+      BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);  \
+    BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     return ret;                                                \
   }                                                            \
 \
   static int BOTTLE_TRY_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message) \
   {                                                            \
     int ret = 0;                                               \
-    ASSERT (!pthread_mutex_lock (&self->mutex));               \
-    if (!QUEUE_IS_EMPTY (self->queue))                         \
+    BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
+    if (!BOTTLE_IS_EMPTY (self))                               \
     {                                                          \
       QUEUE_POP_##TYPE (&self->queue, message);                \
-      DEBUG (fprintf (stderr, "Bottle %p level = %zu.\n", self, BOTTLE_LEVEL (self))); \
-      ASSERT (!pthread_cond_signal (&self->not_full));         \
+      BOTTLE_ASSERT (!pthread_cond_signal (&self->not_full));  \
       ret = 1;                                                 \
     }                                                          \
     else if (self->closed)                                     \
       errno = ECONNABORTED;                                    \
     else                                                       \
       errno = EWOULDBLOCK;                                     \
-    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
+    BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     return ret;                                                \
   }                                                            \
 \
-  static void BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY_##TYPE (BOTTLE_##TYPE *self) \
+  static void BOTTLE_CLOSE_##TYPE (BOTTLE_##TYPE *self)        \
   {                                                            \
-    ASSERT (!pthread_mutex_lock (&self->mutex));               \
+    BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
     self->closed = 1;                                          \
-    while (!QUEUE_IS_EMPTY (self->queue))                      \
-      ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex)); \
-    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
-    ASSERT (!pthread_cond_broadcast (&self->not_empty));       \
-    ASSERT (!pthread_cond_broadcast (&self->not_full));        \
+    BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
+    BOTTLE_ASSERT (!pthread_cond_broadcast (&self->not_empty));\
+    BOTTLE_ASSERT (!pthread_cond_broadcast (&self->not_full)); \
   }                                                            \
   \
   static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE *self)      \
   {                                                            \
-    ASSERT (!pthread_mutex_lock (&self->mutex));               \
+    BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
     self->closed = 1;                                          \
-    ASSERT (!pthread_mutex_unlock (&self->mutex));             \
+    BOTTLE_ASSERT3 (BOTTLE_IS_EMPTY (self),                    \
+                    "Some '" #TYPE "s' are lost.\n", 0);       \
+    BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     pthread_mutex_destroy (&self->mutex);                      \
     pthread_cond_destroy (&self->not_empty);                   \
     pthread_cond_destroy (&self->not_full);                    \
@@ -253,4 +266,11 @@
     free (self);                                               \
   }                                                            \
   struct __useless_struct_to_allow_trailing_semicolon__
+
+#define DEFINE_BOTTLE0() DEFINE_BOTTLE1(BOTTLE_DUMMY_TYPE)
+#define DEFINE_BOTTLE(...) VFUNC(DEFINE_BOTTLE, __VA_ARGS__)
+
+#define BOTTLE_IS_EMPTY(self) (QUEUE_IS_EMPTY((self)->queue))
+#define BOTTLE_IS_FULL(self) (!(self)->queue.unlimited && QUEUE_IS_FULL((self)->queue))
+
 #endif

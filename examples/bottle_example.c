@@ -55,8 +55,10 @@ close_bottle (void *arg)
   sleep (7);
   BOTTLE (Point) * bottle = arg;
   fprintf (stderr, "Closer thread %1$#lx: bottle %2$p CLOSING...\n", pthread_self (), (void *) bottle);
-  BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (bottle);
-  fprintf (stderr, "Closer thread %1$#lx: bottle %2$p CLOSED.\n", pthread_self (), (void *) bottle);
+  BOTTLE_CLOSE (bottle);
+  fprintf (stderr, "Closer thread %1$#lx: bottle %2$p CLOSED and DISPOSING...\n", pthread_self (), (void *) bottle);
+  //BOTTLE_WAIT_UNTIL_EMPTY (bottle);
+  fprintf (stderr, "Closer thread %1$#lx: bottle %2$p CLOSED and DISPOSED.\n", pthread_self (), (void *) bottle);
   return 0;
 }
 
@@ -74,7 +76,7 @@ feed (void *arg)
     int size = snprintf (0, 0, fmt, p.x, p.y);
 
     // The feeder is responsible for any required ressource allocation in the message.
-    ASSERT (p.s = malloc ((size + 1) * sizeof (*p.s)));
+    BOTTLE_ASSERT (p.s = malloc ((size + 1) * sizeof (*p.s)));
     snprintf (p.s, size + 1, fmt, p.x, p.y);
     char *scpy = strdup (p.s);
 
@@ -139,13 +141,10 @@ eat (void *arg)
 int
 main (void)
 {
-  BOTTLE (Point) * bottle = BOTTLE_CREATE (Point);
-  ASSERT (bottle);
+  BOTTLE (Point) * bottle = BOTTLE_CREATE (Point, 3);
+  BOTTLE_ASSERT (bottle);
   switch (BOTTLE_CAPACITY (bottle))
   {
-    //case UNLIMITED:
-    //  fprintf (stderr, "Bottle %1$p created (buffered with infinite capacity).\n", (void *) bottle);
-    //  break;
     case UNBUFFERED:
       fprintf (stderr, "Bottle %1$p created (unbuffered).\n", (void *) bottle);
       break;
@@ -180,13 +179,13 @@ main (void)
 
   // From here, the feeder is done, the bottle won't be filled any more.
 
-  fprintf (stderr, "Bottle %p drying...\n", (void *) bottle);
   // Therefore, we can close the bottle:
   // 1. prevents any new message from being sent in the bottle.
-  // 2. waits for the bottle to be emptied by the receivers.
+  // 2. waits for the bottle to be emptied by the eaters.
   // 3. asks for any blocked receivers to stop waiting for food and to finish their job.
-  BOTTLE_CLOSE_AND_WAIT_UNTIL_EMPTY (bottle);
-  fprintf (stderr, "Bottle %p dry.\n", (void *) bottle);
+  fprintf (stderr, "Bottle %p closing...\n", (void *) bottle);
+  BOTTLE_CLOSE (bottle);
+  fprintf (stderr, "Bottle %p closed.\n", (void *) bottle);
 
   // From here, the bottle has been emptied.
 
@@ -197,10 +196,22 @@ main (void)
   // From here, all eaters are done, and there are not anymore users of the bottle:
   // the bottle can be destroyed safely
 
+  fprintf (stderr, "Bottle %p dispose...\n", (void *) bottle);
+  //BOTTLE_WAIT_UNTIL_EMPTY (bottle);
+  fprintf (stderr, "Bottle %p disposed.\n", (void *) bottle);
+
   pthread_join (starter, 0);
   pthread_join (stopper, 0);
   pthread_join (closer, 0);
+  switch (BOTTLE_CAPACITY (bottle))
+  {
+    case UNBUFFERED:
+      fprintf (stderr, "Bottle %1$p destroyed (unbuffered).\n", (void *) bottle);
+      break;
+    default:
+      fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
+      break;
+  }
   BOTTLE_DESTROY (bottle);
-  fprintf (stderr, "Bottle %p destroyed.\n", (void *) bottle);
   fprintf (stderr, "Finished.\n");
 }
