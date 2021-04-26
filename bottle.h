@@ -77,8 +77,8 @@ typedef int BOTTLE_DUMMY_TYPE;
   {                                         \
     struct _queue_##TYPE {                  \
       TYPE* buffer;                         \
-      TYPE* reader_head;                    \
-      TYPE* writer_head;                    \
+      TYPE* reader_head; /* position where to read the next value */  \
+      TYPE* writer_head; /* position where to write the next value */ \
       size_t                size;           \
       size_t                capacity;       \
       int                   unlimited;      \

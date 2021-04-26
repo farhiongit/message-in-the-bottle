@@ -41,6 +41,7 @@
 #define QUEUE_IS_EMPTY(queue) ((queue).reader_head == 0)
 #define QUEUE_CAPACITY(queue) ((queue).capacity)
 #define QUEUE_SIZE(queue) ((queue).size)
+#define QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE(capacity) ((capacity)*2)
 
 #define DEFINE_BOTTLE1( TYPE )                                                \
   static int  BOTTLE_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);         \
@@ -80,13 +81,15 @@
   {                                                            \
     if (QUEUE_IS_FULL (*q) && q->unlimited)                    \
     {                                                          \
-      q->capacity++; /* therefore, q->capacity >= 2 */         \
+      size_t oldc = q->capacity;                               \
+      q->capacity = QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE (q->capacity); \
+      BOTTLE_ASSERT (q->capacity > oldc);                      \
       TYPE *oldq = q->buffer;                                  \
       BOTTLE_ASSERT (q->buffer = realloc (q->buffer, q->capacity * sizeof (*q->buffer))); \
-      q->reader_head = q->buffer + (q->reader_head - oldq) + 1;\
+      q->reader_head = q->buffer + (q->reader_head - oldq) + (q->capacity - oldc);\
       q->writer_head = q->buffer + (q->writer_head - oldq);    \
       for (TYPE* p = q->buffer + q->capacity - 1 ; p >= q->reader_head ; p--) \
-        *p = *(p-1);                                           \
+        *p = *(p - (q->capacity - oldc));                      \
     }                                                          \
     else if (QUEUE_IS_FULL (*q))                               \
     {                                                          \
@@ -107,9 +110,6 @@
   {                                                            \
     if (QUEUE_IS_EMPTY (*q))                                   \
     {                                                          \
-      if (q->unlimited)                                        \
-        BOTTLE_ASSERT (q->writer_head = q->buffer =            \
-                       realloc (q->buffer, (q->capacity = 1) * sizeof (*q->buffer))); \
       errno = EPERM;                                           \
       return 0;                                                \
     }                                                          \
@@ -117,9 +117,36 @@
     q->reader_head++;                                          \
     if (q->reader_head == q->buffer + q->capacity)             \
       q->reader_head = q->buffer;                              \
-    if (q->reader_head == q->writer_head)                      \
+    if (q->reader_head == q->writer_head) /* empty queue */    \
       q->reader_head = 0;                                      \
     q->size--;                                                 \
+    if (q->unlimited && q->size && q->reader_head &&           \
+        QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE (q->size) <= q->capacity) \
+    {                                                          \
+      size_t oldc = q->capacity;                               \
+      q->capacity = q->size;                                   \
+      if (q->reader_head >= q->writer_head + (oldc - q->capacity)) \
+      {                                                        \
+        q->reader_head = q->reader_head - (oldc - q->capacity);\
+        for (TYPE* p = q->reader_head ; p < q->buffer + q->capacity ; p++) \
+          *p = *(p + (oldc - q->capacity));                    \
+      }                                                        \
+      else if (q->reader_head < q->writer_head)                \
+      {                                                        \
+        for (TYPE* p = q->reader_head ; p < q->writer_head ; p++) \
+          *(q->buffer + (p - q->reader_head)) = *p;            \
+        q->writer_head = q->buffer + (q->writer_head - q->reader_head); \
+        q->reader_head = q->buffer;                            \
+      }                                                        \
+      else                                                     \
+        BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);                \
+      if (q->writer_head == q->buffer + q->capacity)           \
+        q->writer_head = q->buffer;                            \
+      TYPE *oldq = q->buffer;                                  \
+      BOTTLE_ASSERT (q->buffer = realloc (q->buffer, q->capacity * sizeof (*q->buffer))); \
+      q->reader_head = q->buffer + (q->reader_head - oldq);    \
+      q->writer_head = q->buffer + (q->writer_head - oldq);    \
+    }                                                          \
     return 1;                                                  \
   }                                                            \
 \

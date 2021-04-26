@@ -29,10 +29,11 @@ int main (void)
   BOTTLE_DESTROY (fifo);
 
   fifo = BOTTLE_CREATE (int, UNLIMITED);
-  printf ("Capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
+  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   write (fifo);
+  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   read (fifo);
-  printf ("Capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
+  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   BOTTLE_CLOSE (fifo);
   BOTTLE_DESTROY (fifo);
 }

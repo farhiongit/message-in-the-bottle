@@ -208,6 +208,9 @@ main (void)
     case UNBUFFERED:
       fprintf (stderr, "Bottle %1$p destroyed (unbuffered).\n", (void *) bottle);
       break;
+    case UNLIMITED:
+      fprintf (stderr, "Bottle %1$p destroyed (effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
+      break;
     default:
       fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
       break;

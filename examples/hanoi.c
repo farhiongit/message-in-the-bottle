@@ -71,7 +71,7 @@ stack_remove (enum tower name)
   if (!stack || !stack->hight)
     return 0;
   stack->hight--;
-  stack->rings = realloc (stack->rings, sizeof (*stack) * stack->hight);
+  stack->rings = realloc (stack->rings, sizeof (*stack->rings) * stack->hight);
   if (!stack->hight)
     stack->rings = 0;
   return stack->hight;
@@ -157,7 +157,6 @@ solve (void *arg)
 #endif
   unsigned long *ret = malloc (sizeof (*ret));
   *ret = nb_moves;
-  //printf ("Moving %lu rings from %c to %c requires %lu moves.\n", nb_rings, A, C, nb_moves);
   return ret;
 }
 
@@ -172,7 +171,7 @@ main (int argc, char **argv)
 #ifdef TRACE
   for (unsigned long ring = nb_rings; ring > 0; ring--)
     stack_add (A, ring);
-  solver_args.moves = bottle_create (Move);
+  solver_args.moves = bottle_create (Move, UNLIMITED);
 #endif
   pthread_create (&solver, 0, solve, &solver_args);
 
@@ -183,8 +182,6 @@ main (int argc, char **argv)
     fprintf (stderr, "Move ring %lu from %c to %c.\n", m.ring, m.from, m.to);
     move_ring (m.ring, m.from, m.to);
   }
-  while (stack_remove (C))
-     /**/;
 #endif
 
   void *ret;
@@ -193,5 +190,7 @@ main (int argc, char **argv)
   free (ret);
 #ifdef TRACE
   bottle_destroy (solver_args.moves);
+  while (stack_remove (C))
+     /**/;
 #endif
 }
