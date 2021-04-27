@@ -1,4 +1,4 @@
-CFLAGS=-I..
+CFLAGS=-I.. -Wall
 #CFLAGS+=-O
 CFLAGS+=-g
 LDFLAGS=-pthread

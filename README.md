@@ -30,8 +30,56 @@ Under the hook, this pattern is a thread-safe FIFO message queue suited for thre
 It hides mutexed and thread synchronization complexity behind simple objects, called *bottles*, similar for example to the concept of *channels* found in language Go
 (which shows a nice and minimalistic grammar and overall simplicity, as compared to C++ or Java).
 
-The API is simple : declare a channel and the type of messages bound to it, create a channel, send and receive messages, close and destroy the channel.
-Details and examples are given below. 
+The API is simple : declare and define a channel (*bottle*) and the type of messages bound to it, create a channel, send and receive messages, close and destroy the channel:
+
+```c
+#include <unistd.h>
+#include <stdio.h>
+
+#include "bottle_impl.h"        // Include necessary stuff
+typedef const char *Message;
+DECLARE_BOTTLE (Message);       // Declare the template for type 'Message'
+DEFINE_BOTTLE (Message);        // Define the template for type 'Message'
+
+static void *
+eat (void *arg)                 // The thread that receives the messages
+{
+  bottle_t (Message) * bottle = arg;
+  Message m;
+  while (bottle_recv (bottle, m))       // Receive a message
+    printf ("...%s\n", m);
+  return 0;
+}
+
+int
+main (void)
+{
+  bottle_t (Message) * bottle = bottle_create (Message);        // create a bottle (on the sender side), unbuffered, for communication and synchronization
+
+  // 10 consumers
+  pthread_t eater[10];
+  for (pthread_t * p = eater; p < eater + sizeof (eater) / sizeof (*eater); p++)
+    pthread_create (p, 0, eat, bottle);
+
+  // 1 producer
+  Message police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
+  for (Message * m = police; m < police + sizeof (police) / sizeof (*police); m++)
+  {
+    printf ("%s...\n", *m);
+    bottle_send (bottle, *m);   // Send a message
+    sleep (1);
+  }
+
+  bottle_close (bottle);        // close the bottle (tells the receiver threads that all messages have been sent.)
+  for (pthread_t * p = eater; p < eater + sizeof (eater) / sizeof (*eater); p++)
+    pthread_join (*p, 0);       // Waits for the receiver thread to finish its work (it uses the bottle).
+  bottle_destroy (bottle);      // Destroys the bottle once receiver threads are over.
+}
+```
+
+Details, discussions and examples are given below.
+
+**Have fun !**
 
 # Thread synchronization through messages
 
@@ -63,16 +111,19 @@ Even if unbuffred queues are efficient in most cases, buffered queues can be nee
 For this purpose, an optional argument *capacity* can be passed at creation of a message queue.
 
 - A *capacity* set to a positive integer defines a buffered queue of fixed and limited capacity.
+    This configuration relaxes the synchronization between threads.
 
-    This could be used to manage tokens: *capacity* is then the number of available tokens.
+    This could also be used to manage tokens: *capacity* is then the number of available tokens.
     Call `BOTTLE_TRY_FILL` to request a token, and call `BOTTLE_TRY_DRAIN` to release a token.
     The bottle is then used as a container of controlled capacity.
     `BOTTLE_CLOSE` need not be used in this case.
+    There is such an example below.
 
 - A *capacity* set to `UNBUFFERED` or 1 defines an unbuffered queue (default, suitable for most purposes.)
 
 - A *capacity* set to `UNLIMITED` or 0 defines a queue of infinite capacity.
-  This configuration allocates and desallocates capacity dynamically as needed.
+  This configuration allows easy communication between producers and consumers without any constraints on synchronization.
+  It allocates and desallocates capacity dynamically as needed for messages in the pipe between producers and consumers.
   It is therefore slower than an `UNBUFFERED` queue or a queue with fixed capacity.
   It should be used with care as it could exhaust memory if the producer rate exceeds dramatically the consumer rate.
 
@@ -409,100 +460,6 @@ All sources should be compiled with the option `-pthread`.
 
 ## Unbuffered bottle: Thread synchronization
 
-### Simple example
-
-The source below is a simple example of the standard use of the API for thread synchronization.
-It uses the C-like style.
-
-```c
-#include <unistd.h>
-#include <stdio.h>
-
-#include "bottle_impl.h"
-typedef const char *Message;
-DECLARE_BOTTLE (Message);       // Declares the template for type 'Message'
-DEFINE_BOTTLE (Message);        // Defines the template for type 'Message'
-
-static void *
-eat (void *arg)                 // The thread that receives the messages
-{
-  bottle_t (Message) * bottle = arg;
-  Message m;
-  while (bottle_recv (bottle, m))
-    printf ("%s\n", m);
-  return 0;
-}
-
-static void *
-feed (void *arg)
-{
-  bottle_t (Message) * bottle = arg;
-  Message police[] = { "I'll send an SOS to the world", "I hope that someone gets my", "Message in a bottle" };
-  for (size_t i = 0; i < 2 * sizeof (police) / sizeof (*police); i++)
-  {
-    bottle_send (bottle, police[i / 2]);
-    sleep (1);
-  }
-  return 0;
-}
-
-int
-main (void)                     // The (main) thread that creates the bottle
-{
-  bottle_t (Message) * bottle = bottle_create (Message);
-
-  pthread_t eater;
-  pthread_create (&eater, 0, eat, bottle);
-
-#ifndef FEEDER_THREAD           // Option 1: the sender is in the same thread as the one that created it.
-
-  feed (bottle);
-
-#else                           // Option 2: the sender is in a dedicated thread.
-
-  pthread_t feeder;
-  pthread_create (&feeder, 0, feed, bottle);
-  pthread_join (feeder, 0);     // Waits for the sender to finish.
-
-#endif
-
-  bottle_close (bottle);        // Tells the receiver thread that the sending thread has finished sending messages
-  pthread_join (eater, 0);      // Waits for the receiver thread to finish its work (it uses the bottle).
-  bottle_destroy (bottle);      // Destroys the bottle once both threads are over.
-}
-```
-
-Comments:
-
-- A bottle is created (`bottle_create` or `BOTTLE_CREATE`) to communicate synchronously between two threads, a sender and a receiver:
-  it is a template container which type is `bottle_t (Message)` or `BOTTLE (Message)`, where `Message` is a user-defined type.
-
-- The `eat` function (the receiver which calls `bottle_recv` or `BOTTLE_DRAIN`) is in one thread `eater` (but there could be several),
-  which pace is synchronized with the sender.
-
-  That's what it's all about: synchonizing threads with messages !
-
-- The sending loop (in the sender function `feed` which calls `bottle_send` or `BOTTLE_FILL`) is:
-  - either in the same thread (here the `main` thread)
-  as the one which created the bottle
-  - or in an alternate dedicated thread (when compiled with option `FEEDER_THREAD`).
-
-
-- The thread that created the bottle:
-
-  1. waits for the feeder process to finish.
-  1. closes the bottle (`bottle_close` or `BOTTLE_CLOSE`)
-
-     Closing the bottle in the thread that created it is a good practice:
-     - it protects against the bottle being closed during the transmission phase
-     - it is suitable with the use of several concurrent feeder thread if needed.
-     - it helps keep things easier.
-
-  1. waits for the eater thread to finish (`pthread_join (eater, 0)`)
-  1. destroys the bottle (`bottle_destroy` or `BOTTLE_DESTROY`).
-
-### Advanced example
-
 [`bottle_example.c`](examples/bottle_example.c) is a complete example of a program (compile with option `-pthread`)
 using a synchronized thread-safe FIFO message queue.
 
@@ -599,4 +556,3 @@ Note:
 - the use of a local automatic variable `tokens_in_use` declared by `BOTTLE_DECL`,
 - how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
-**Have fun !**
