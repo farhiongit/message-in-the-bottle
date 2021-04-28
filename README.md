@@ -693,11 +693,11 @@ which in turn will be translated into a call to `bottle_send_int(b, 5)` at runti
 
 The names of the macros and functions are slightly diffrent in the code but this is the concept.
 
-This ideas come from [the blog of Randy Gaul on](http://www.randygaul.net/2012/08/10/generic-programming-in-c/).
+This ideas come from [the blog of Randy Gaul](http://www.randygaul.net/2012/08/10/generic-programming-in-c/).
 
 ### Optional arguments
 
-Some calls (such as `bottle_create(bottle_*TYPE*, [size_t capacity])` accept optional arguments (here `capacity`).
+Some calls (such as `bottle_create(*TYPE*, [size_t capacity])` accept optional arguments (here `capacity`).
 
 This is brougth by the use of the tricky macro VFUNC defined in `vfunc.h` (see http://stackoverflow.com/questions/11761703/overloading-macro-on-number-of-arguments).
 
