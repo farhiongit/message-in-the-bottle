@@ -33,7 +33,8 @@ stop (void *arg)
   sleep (2);
   BOTTLE (Point) * bottle = arg;
   BOTTLE_PLUG (bottle);
-  fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p PLUGGED.\n", pthread_self (), (void *) bottle);
+  if (BOTTLE_IS_PLUGGED (bottle))
+    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p PLUGGED.\n", pthread_self (), (void *) bottle);
   return 0;
 }
 
@@ -44,7 +45,8 @@ restart (void *arg)
   sleep (5);
   BOTTLE (Point) * bottle = arg;
   BOTTLE_UNPLUG (bottle);
-  fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p UNPLUGGED.\n", pthread_self (), (void *) bottle);
+  if (!BOTTLE_IS_PLUGGED (bottle))
+    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p UNPLUGGED.\n", pthread_self (), (void *) bottle);
   return 0;
 }
 

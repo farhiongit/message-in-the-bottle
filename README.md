@@ -1,5 +1,4 @@
-Procuder/consumer pattern for thread communication and/or syncronization in C.
-==============================================================================
+# Procuder/consumer pattern for thread communication and/or syncronization in C.
 
 > This project implements a communication and synchronization mechanism between producer and consumer threads.
 
@@ -81,7 +80,7 @@ Details, discussions and examples are given below.
 
 **Have fun !**
 
-# Thread synchronization through messages
+## Thread synchronization through messages
 
 Threads can synchronize using the producer/consumer pattern. Consumer threads (possibly several) trigger when they receive
 messages sent by producer threads (possibly several).
@@ -90,12 +89,12 @@ Each message is consumed by at most one consumer thread.
 
 Messages are managed in a thread-safe message queue (called *bottle* thereafter).
 
-## Unbuffered message queue
+### Unbuffered message queue
 
 The created message queue is unbuffered by default.
 Such an unbuffered queue is suitable for a tight synchronization between threads running concurrently.
 
-## Buffered message queue
+### Buffered message queue
 
 Even if unbuffred queues are efficient in most cases, buffered queues can be needed for specific use cases:
 
@@ -111,6 +110,7 @@ Even if unbuffred queues are efficient in most cases, buffered queues can be nee
 For this purpose, an optional argument *capacity* can be passed at creation of a message queue.
 
 - A *capacity* set to a positive integer defines a buffered queue of fixed and limited capacity.
+
     This configuration relaxes the synchronization between threads.
 
     This could also be used to manage tokens: *capacity* is then the number of available tokens.
@@ -121,8 +121,13 @@ For this purpose, an optional argument *capacity* can be passed at creation of a
 
 - A *capacity* set to `UNBUFFERED` or 1 defines an unbuffered queue (default, suitable for most purposes.)
 
+  This the choice for thread synchronization through messages.
+
 - A *capacity* set to `UNLIMITED` or 0 defines a queue of infinite capacity.
+
   This configuration allows easy communication between producers and consumers without any constraints on synchronization.
+  It can be useful for asynchronous I/O for example, as in [`hanoi.c`](examples/hanoi.c).
+
   It allocates and desallocates capacity dynamically as needed for messages in the pipe between producers and consumers.
   It is therefore slower than an `UNBUFFERED` queue or a queue with fixed capacity.
   It should be used with care as it could exhaust memory if the producer rate exceeds dramatically the consumer rate.
@@ -134,7 +139,7 @@ This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.gi
 
 *As said before, the usage of buffered queues is neither required nor recommended for thread synchronization, as it would partly unsynchronize threads and uses a larger amount of memory ; `UNBUFFERED` queues are suitable for most purposes.*
 
-# Insights of the user interface
+## Insights of the user interface
 
 The user interface is available in two styles, a macro-like and a C-like style.
 Those two are strictly equivalent:
@@ -150,26 +155,30 @@ Those two are strictly equivalent:
 |**Dynamic allocation** |
 ||Create                | `BOTTLE_CREATE`                     | `bottle_create`
 ||Destroy               | `BOTTLE_DESTROY`                    | `bottle_destroy`
-|**Actions**            |
+|**Sending and receiving** |
+|*Blocking* |
 ||Send message          | `BOTTLE_FILL`                       | `bottle_send`
 ||Receive message       | `BOTTLE_DRAIN`                      | `bottle_recv`
-||Close sending channel | `BOTTLE_CLOSE`                      | `bottle_close`
-|**Other actions**      |
+|*Non blocking* |
 ||Try sending message   | `BOTTLE_TRY_FILL`                   | `bottle_try_send`
 ||Try receiving message | `BOTTLE_TRY_DRAIN`                  | `bottle_try_recv`
+|**Closing** |
+||Close sending channel | `BOTTLE_CLOSE`                      | `bottle_close`
+|**Halting** |
 ||Plug                  | `BOTTLE_PLUG`                       | `bottle_plug`
 ||Unplug                | `BOTTLE_UNPLUG`                     | `bottle_unplug`
 |**Properties**         |
+||Is plugged            | `BOTTLE_IS_PLUGGED`                 | `bottle_is_plugged`
 ||Is closed             | `BOTTLE_IS_CLOSED`                  | `bottle_is_closed`
 ||Get buffer capacity   | `BOTTLE_CAPACITY`                   | `bottle_capacity`
 
 The following text uses the macro-like style but the equivalent C-like style can be used as well.
 
-## Declaration (allocation) of bottles
+### Declaration (allocation) of bottles
 
  Bottles can be created either dynamically or with an automatically allocation.
 
-### Creation of a bottle, dynamically
+#### Creation of a bottle, dynamically
 
 > BOTTLE (*T*) \* **BOTTLE_CREATE** (*T*, [size_t capacity = UNBUFFERED])
 >
@@ -190,14 +199,14 @@ or `UNLIMITED`) second argument of `BOTTLE_CREATE` :
 
 `BOTTLE(` *T* `) *`*bottle* ` = BOTTLE_CREATE (` *T* `, ` *capacity* `);`
 
-#### Destruction of a bottle dynamically allocated
+##### Destruction of a bottle dynamically allocated
 
 > void **BOTTLE_DESTROY** (BOTTLE (*T*) \*bottle)
 
 Thereafter, once *all the receivers are done* (see **Closing communication** below) in the user program,
 and the bottle is not needed anymore, it can be destroyed safely with `BOTTLE_DESTROY`.
 
-### Declaration of local (automatic) variable
+#### Declaration of local (automatic) variable
 
 Rather than creating pointers to bottles, local variables of type BOTTLE (*T*) can as well be declared and initialized with `BOTTLE_DECL`.
 These variables behave like automatic variables: resources are automatically allocated at declaration and deallocated at end of scope.
@@ -232,7 +241,7 @@ int main (void)
 }
 ```
 
-## Exchanging messages between threads
+### Exchanging messages between threads
 
 Sender threads communicate with receiver threads by exchanging messages through the bottle:
 the bottle has a mouth where it can be filled with messages and a tap from where it can be drained.
@@ -241,7 +250,7 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 
 <small>(c) Davis & Waddell - EcoGlass Oil Bottle with Tap Large 5 Litre | Peter's of Kensington</small>
 
-### Receiving messages
+#### Receiving messages
 
 > int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T*& message])
 >
@@ -271,7 +280,7 @@ The received message feeds the variable `message`.
 
 Therefore `BOTTLE_DRAIN` returns 1 if a message has been sucessfully received from the bottle, 0 otherwise.
 
-### Sending messages
+#### Sending messages
 
 > int **BOTTLE_FILL** (BOTTLE (*T*) \*bottle, [*T* message])
 >
@@ -306,7 +315,7 @@ and the botlle is not closed.
 
 Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the bottle, 0 otherwise.
 
-### Resources management
+#### Resources management
 
 In particular and unusual case where the message type *T* would be or would contain (in a structure) allocated resources (such as memory with `malloc`/`free` or file descriptor with `fopen`/`fclose` for instance),
 the user program must respect those simple rules:
@@ -325,7 +334,7 @@ the user program must respect those simple rules:
   (i.e. after the call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`), and after use of the message,
   deallocate (release) all the resources of the message (those previously allocated by the sender).
 
-## Closing communication
+### Closing communication
 
 > void **BOTTLE_CLOSE** (BOTTLE (*T*) \*bottle)
 
@@ -367,9 +376,9 @@ threads* on sender and reciever sides and need not be used in other cases (threa
 ensure* that all receivers have finished their work between `BOTTLE_CLOSE`
 and `BOTTLE_DESTROY`.
 
-## Other features
+### Other features
 
-### Unblocking message queue functions
+#### Unblocking message queue functions
 
 > int **BOTTLE_TRY_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
 >
@@ -405,7 +414,7 @@ behaves like a simple thread-safe FIFO message queue:
 Notice that the second argument *message* is of type *T*, and not a pointer to *T*,
 even though it might be modified by `BOTTLE_TRY_DRAIN` (macro magic here).
 
-### Halting communication
+#### Halting communication
 
 > void **BOTTLE_PLUG** (BOTTLE (*T*) \*bottle)
 
@@ -417,7 +426,7 @@ The mouth of the bottle can be:
 - plugged (stopping communication) with `BOTTLE_PLUG`,
 - unplugged (to restart communication) with `BOTTLE_UNPLUG`.
 
-### Getting the capacity of a bottle
+#### Getting the capacity of a bottle
 
 > size_t **BOTTLE_CAPACITY** (BOTTLE (*T*) \*bottle)
 
@@ -427,14 +436,14 @@ The mouth of the bottle can be:
  - A positive number indicate a buffered bottle of limited capacity.
  - A value equal to `UNLIMITED` (or 0) indicates a buffered bottle of unlimited capacity.
 
-### Hidden data
+#### Hidden data
 
 If the content of the messages is not needed, the argument *message* can be *omitted* in calls to
 `BOTTLE_TRY_DRAIN`, `BOTTLE_DRAIN`, `BOTTLE_TRY_FILL` and `BOTTLE_FILL`.
 
 In this case, a bottle is simply used as a synchronization method or a token counter.
 
-# Usage
+## Usage
 
 Before use:
 1. include header file `bottle_impl.h`.
@@ -448,24 +457,24 @@ DECLARE_BOTTLE (TextMessage);       // Declares the usage of bottles for the use
 DEFINE_BOTTLE (TextMessage);        // Defines the usage of bottles for the user-defined type.
 ```
 
-## Source files
+### Source files
 
 - [`bottle.h`](bottle.h) declares the user interface documented here (about 100 lines of source code).
 - [`bottle_impl.h`](bottle_impl.h) defines the user programming interface (about 200 lines of source code).
 - [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h). It permits usage of optional parameters in function signatures.
 
-# Examples
+## Examples
 
 All sources should be compiled with the option `-pthread`.
 
-## Unbuffered bottle: Thread synchronization
+### Unbuffered bottle: Thread synchronization
 
 [`bottle_example.c`](examples/bottle_example.c) is a complete example of a program (compile with option `-pthread`)
 using a synchronized thread-safe FIFO message queue.
 
-## Buffered bottle
+### Buffered bottle
 
-### High performance message exchanges
+#### High performance message exchanges
 
 When high performance of exchanges is required between threads (more than 100 000 messages per seconds), a buffered bottle is a good choice (reminder: in other cases, an unbuffered bottle is far enough.)
 
@@ -508,7 +517,7 @@ main (void)
 }
 ```
 
-### Token management
+#### Token management
 
 Tokens can be managed with a buffered bottle, in this very naive model:
 
@@ -555,4 +564,140 @@ Note:
 
 - the use of a local automatic variable `tokens_in_use` declared by `BOTTLE_DECL`,
 - how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
+
+## Under the hook (internals)
+
+Each instance of a bottle :
+  - contains a FIFO queue `queue` (see below.)
+  - two states `closed` and `frozen` indicating a bottle was closed or plugged respectively.
+
+### Thread synchronization
+
+The pattern for a thread-safe FIFO queue (that's what a bottle is) is explained by Butenhof in his book "Programming with POSIX threads".
+
+Each instance of a bottle is protected by a mutex for thread-safeness and two conditions for synchronization.
+
+```c
+    pthread_mutex_t mutex;
+    pthread_cond_t  not_empty;
+    pthread_cond_t  not_full;
+```
+
+Each time the bottle is accessed for modification (plugging and unplugging, filling and emptying, closing),
+the action is guarded by the mutex (call of `pthread_mutex_lock/unlock` on `mutex`).
+
+Each time a message is sent in the bottle,
+  - if the bottle is already full, the caller waits until the bottle is not full anymore or is closed (call of `pthread_cond_wait` on `not_full`).
+  - the bottle signals it is not empty (call of `pthread_cond_signal` on `not_empty`)
+
+Each time a message is received from the bottle,
+  - if the bottle is empty, the caller waits until the bottle is filled in or closed (call of `pthread_cond_wait` on `not_empty`).
+  - the bottle signals it is not full (call of `pthread_cond_signal` on `not_full`)
+
+When the bottle is closed, it signals it is not empty (call of `pthread_cond_signal` on `not_empty`) and not full (call of `pthread_cond_signal` on `not_full`)
+so that pending senders and receivers are unblocked.
+
+### Message queue buffer... ring
+
+The FIFO queue of a bottle is defined as:
+
+```c
+    struct {
+      TYPE*   buffer;      // Array containing the messages (at most capacity)
+      size_t  capacity;    // Maximum number of elements in the queue (size of the array)
+      size_t  size;        // Number of messages in the queue (<= capacity)
+      TYPE*   reader_head; // Position where to read the next value
+      TYPE*   writer_head; // Position where to write the next value
+      int     unlimited;   // Indicates that the capacity can be extended automatically as required
+    }
+```
+
+where `TYPE` is the type of messages stored in the queue (this type is defined at creation of the bottle, see below.)
+
+When a messag is added in the queue, it is copied (hollow copy) at some position in the buffer (`*pos = message`).
+When a messag is removes from the queue, it is copied (hollow copy) from some position in the buffer (`message = *pos`).
+
+Let's consider a naïve implementation of the buffer where written messages are appended, starting from the beginning of the buffer.
+  - After writing messages *a*, *b* ,*c* in a buffer of size 4, the buffer would look like `[abc_]` where `_` indicates an empty position.
+  - After reading the first message (*a*), we get `[bc__]`.
+  - After writing a message *d* (appended at the end of the buffer), we get `[bcd_]`.
+  - After reading the next message (*b*), we get `[cd__]`.
+  - After writing a message *e* (appended at the end of the buffer), we get `[cde_]`.
+  - After reading the two next messages (*c* and *d*), we get `[e___]`.
+
+This requires shifting all the elements of the buffer every time it is read, which is time consuming (linear time with buffer size).
+
+To avoid shifting and to work at constant time whatever the size of the buffer,
+it is better to keep track of the next position where to write (the `writer_head`) and where to read (the `reader_head`).
+  - After writing messages *a*, *b* ,*c* in a buffer of size 4, the buffer looks like `[abc_]`.
+    The writer head is on the first empty position. The reader head is on the first position (*a*).
+  - After reading the first message (*a*) at the reader head position, we get `[_bc_]`. The reader head moves to the next (non empty) position (*b*).
+  - After writing a message *d* (appended at the writer head position), we get `[_bcd]`.
+
+    Instead of shifting the entire buffer to create space at the end of the buffer for the next message (`[_bcd]` to `[bcd_]`),
+    the writer head moves to the next (empty) position which is at the beginning of the buffer.
+
+    The buffer is actually a *ring* : when a header reaches the end of the buffer, it overflows at the beginning of the buffer, ready for the next message to write.
+    This permits an easy recycling of the buffer without shifting involved. 
+
+  - After reading the next message (*b*), we get `[__cd]`. The reader head moves on *c*.
+  - After writing a message *e* (appended at the writer head position), we get `[e_cd]`. The writer head moves to the next empty position.
+  - After reading the two next messages (*c* and *d*), we get `[e___]`.
+
+    Again, the reader head overflows at the beginning of the buffer, ready for the next message to read (*e*).
+
+As said, the buffer is actually a ring:
+  - Reader and writer headed overflow at the beginning of the buffer array when they reach the end of the array.
+  - A message is written at writer head position, after which the writer head is moves to the next position in the array.
+  - A message is read at reader head position, after which the reader head is moves to the next position in the array.
+  - The buffer is full when the writer head reaches the reader head position after writing (i.e. sending a message in the bottle).
+  - The buffer is empty when the redaer head reaches the writer head position after reading (receiveing a message from the bottle).
+
+### Bottle template
+
+This section explains how things like `bottle(int) *b = bottle_create(int)` and `bottle_send (b, 5)` work.
+It uses a little bit of some kind of genericity.
+
+When `bottle_type_declare(int)` and `bottle_type_define(int)` are added in the global part of the code,
+it creates the objet `bottle_int` and a bunch of functions like `bottle_create_int` and `bottle_send_int` (to name a few) behind the scene.
+
+When `bottle_create(int)` is called, it is translated into a call to `bottle_create_int` at compile time using the macro:
+
+```c
+#define bottle_create( TYPE, capacity ) \
+  bottle_create_*TYPE*(capacity)
+```
+
+At creattion of a bottle, the instance of the bottle is tied to its set of functions depending of its type `TYPE` with something loke:
+
+```c
+  const struct
+  {
+    int (*Fill) (bottle_*TYPE* *self, TYPE message);
+    int  (*TryFill) (bottle_*TYPE* *self, TYPE message);
+    int (*Drain) (bottle_*TYPE* *self, TYPE *message);
+    int (*TryDrain) (bottle_*TYPE* *self, TYPE *message);
+    void (*Close) (bottle_*TYPE* *self);
+    void (*Destroy) (bottle_*TYPE* *self);
+  } *vtable = { bottle_send_*TYPE*, bottle_try_send_*TYPE*, bottle_recv_*TYPE*, bottle_try_recv_*TYPE*, bottle_close_*TYPE*, bottle_destroy_*TYPE* };
+```
+
+A call to `bottle_send(b, 5)` will therefore be translated into a call to `Fill(b, 5)` at compile time with a macro like:
+
+```c
+#define bottle_send(self, message)  \
+  ((self)->vtable->Fill ((self), (message)))
+```
+
+which in turn will be translated into a call to `bottle_send_int(b, 5)` at runtime.
+
+The names of the macros and functions are slightly diffrent in the code but this is the concept.
+
+This ideas come from [the blog of Randy Gaul on](http://www.randygaul.net/2012/08/10/generic-programming-in-c/).
+
+### Optional arguments
+
+Some calls (such as `bottle_create(bottle_*TYPE*, [size_t capacity])` accept optional arguments (here `capacity`).
+
+This is brougth by the use of the tricky macro VFUNC defined in `vfunc.h` (see http://stackoverflow.com/questions/11761703/overloading-macro-on-number-of-arguments).
 

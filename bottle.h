@@ -76,12 +76,12 @@ typedef int BOTTLE_DUMMY_TYPE;
   typedef struct _BOTTLE_##TYPE             \
   {                                         \
     struct _queue_##TYPE {                  \
-      TYPE* buffer;                         \
-      TYPE* reader_head; /* position where to read the next value */  \
-      TYPE* writer_head; /* position where to write the next value */ \
-      size_t                size;           \
-      size_t                capacity;       \
-      int                   unlimited;      \
+      TYPE*  buffer;      /* Array containing the messages */           \
+      TYPE*  reader_head; /* Position where to read the next value */   \
+      TYPE*  writer_head; /* Position where to write the next value */  \
+      size_t size;        /* Number of messages in the queue (<= capacity) */ \
+      size_t capacity;    /* Maximum number of elements in the queue (size of the array) */ \
+      int    unlimited;   /* Indicates that the capacity can be extended automatically as required */ \
     } queue;                                \
     int                          closed;    \
     int                          frozen;    \
@@ -141,17 +141,20 @@ typedef int BOTTLE_DUMMY_TYPE;
 /// void BOTTLE_PLUG (BOTTLE (T) *bottle)
 #define BOTTLE_PLUG(self)  \
   do { BOTTLE_ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
-       (self)->frozen = 1 ;                             \
+       (self)->frozen = 1 ;                                    \
        BOTTLE_ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
      } while(0)
 
 /// void BOTTLE_UNPLUG (BOTTLE (T) *bottle)
 #define BOTTLE_UNPLUG(self)  \
   do { BOTTLE_ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
-       (self)->frozen = 0 ;                             \
+       (self)->frozen = 0 ;                                    \
        BOTTLE_ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
        BOTTLE_ASSERT (!pthread_cond_signal (&self->not_full)); \
      } while(0)
+
+/// int BOTTLE_IS_PLUGGED (BOTTLE (T) *bottle)
+#define BOTTLE_IS_PLUGGED(self) ((self)->frozen)
 
 /// void BOTTLE_CLOSE (BOTTLE (T) *bottle)
 #define BOTTLE_CLOSE(self)  \
@@ -197,5 +200,6 @@ __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT
 
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)
+#define bottle_is_plugged(self)   BOTTLE_IS_PLUGGED(self)
 
 #endif
