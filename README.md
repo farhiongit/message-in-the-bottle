@@ -565,7 +565,7 @@ Note:
 - the use of a local automatic variable `tokens_in_use` declared by `BOTTLE_DECL`,
 - how optional arguments *message* are omitted in calls to `BOTTLE_TRY_DRAIN` and `BOTTLE_TRY_FILL`.
 
-## Under the hook (internals)
+## Under the hood (internals)
 
 Each instance of a bottle :
   - contains a FIFO queue `queue` (see below.)
