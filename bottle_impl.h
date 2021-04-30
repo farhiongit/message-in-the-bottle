@@ -43,7 +43,7 @@
 #define QUEUE_SIZE(queue) ((queue).size)
 #define QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE(capacity) ((capacity)*2)
 
-#define DEFINE_BOTTLE1( TYPE )                                                \
+#define DEFINE_BOTTLE( TYPE )                                                 \
   static int  BOTTLE_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);         \
   static int  BOTTLE_TRY_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);     \
   static int  BOTTLE_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message);       \
@@ -293,9 +293,6 @@
     free (self);                                               \
   }                                                            \
   struct __useless_struct_to_allow_trailing_semicolon__
-
-#define DEFINE_BOTTLE0() DEFINE_BOTTLE1(BOTTLE_DUMMY_TYPE)
-#define DEFINE_BOTTLE(...) VFUNC(DEFINE_BOTTLE, __VA_ARGS__)
 
 #define BOTTLE_IS_EMPTY(self) (QUEUE_IS_EMPTY((self)->queue))
 #define BOTTLE_IS_FULL(self) (!(self)->queue.unlimited && QUEUE_IS_FULL((self)->queue))

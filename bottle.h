@@ -57,9 +57,7 @@
 enum { UNLIMITED = 0,
        UNBUFFERED = 1 /* Default capacity for perfect thread synchronization */, };
 
-typedef int BOTTLE_DUMMY_TYPE;
-
-#define DECLARE_BOTTLE1( TYPE )     \
+#define DECLARE_BOTTLE( TYPE )     \
 \
   struct _BOTTLE_##TYPE;           \
 \
@@ -95,19 +93,13 @@ typedef int BOTTLE_DUMMY_TYPE;
   BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE( size_t capacity );  \
   struct __useless_struct_to_allow_trailing_semicolon__
 
-#define DECLARE_BOTTLE0()     DECLARE_BOTTLE1 (BOTTLE_DUMMY_TYPE)
-#define DECLARE_BOTTLE(...)   VFUNC(DECLARE_BOTTLE, __VA_ARGS__)
-
-#define BOTTLE1( TYPE )  BOTTLE_##TYPE
-#define BOTTLE0()        BOTTLE1 (BOTTLE_DUMMY_TYPE)
-#define BOTTLE(...)      VFUNC(BOTTLE, __VA_ARGS__)
+#define BOTTLE( TYPE )  BOTTLE_##TYPE
 
 /// BOTTLE (T) * BOTTLE_CREATE ([T], [size_t capacity = UNBUFFERED])
 #define BOTTLE_CREATE1( TYPE ) \
   BOTTLE_CREATE_##TYPE(1)
 #define BOTTLE_CREATE2( TYPE, capacity ) \
   BOTTLE_CREATE_##TYPE(capacity)
-#define BOTTLE_CREATE0() BOTTLE_CREATE1( BOTTLE_DUMMY_TYPE )
 #define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
 
 /// int BOTTLE_FILL (BOTTLE (T) *bottle, [T message])
@@ -175,7 +167,6 @@ typedef int BOTTLE_DUMMY_TYPE;
 #define BOTTLE_DECL3(var, TYPE, capacity)  \
 __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT_##TYPE (&var, capacity)
 #define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, 1)
-#define BOTTLE_DECL1(var) BOTTLE_DECL2(var, BOTTLE_DUMMY_TYPE)
 #define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
 #endif
 
