@@ -293,12 +293,14 @@ and the botlle is not closed.
 - `BOTTLE_FILL` waits in those cases:
 
     - If the bottle was plugged (by `BOTTLE_PLUG`, see below), `BOTTLE_FILL` blocks until the bottle is unplugged (by `BOTTLE_UNPLUG`).
-    - If the message queue is **unbuffered** (recommended), `BOTTLE_FILL` blocks until some receiver has received
+    - If the message queue is **unbuffered** (`UNBUFFERED`, recommended), `BOTTLE_FILL` blocks until some receiver has received
       the value sent by a previous sucessful call to `BOTTLE_FILL` or `BOTTLE_TRY_FILL`.
       *It is precisely this behavior that ensures synchronicity between the sender and the receiver*.
-    - If the message queue  is **buffered** and the buffer is of limited caâcity and full,
+    - If the message queue  is **buffered** and the buffer is of limited capacity and full,
     `BOTTLE_FILL` blocks until some receiver has
       retrieved at least one value previously sent (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
+      
+      Note: if the bottle has `UNLIMITED` capacity, it is never full as its capacity increases automatically as necessary to accept new messages (like a skin ballon).
 
 - `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
@@ -629,29 +631,72 @@ This requires shifting all the elements of the buffer every time it is read, whi
 
 To avoid shifting and to work at constant time whatever the size of the buffer,
 it is better to keep track of the next position where to write (the `writer_head`) and where to read (the `reader_head`).
-  - After writing messages *a*, *b* ,*c* in a buffer of size 4, the buffer looks like `[abc_]`.
-    The writer head is on the first empty position. The reader head is on the first position (*a*).
-  - After reading the first message (*a*) at the reader head position, we get `[_bc_]`. The reader head moves to the next (non empty) position (*b*).
-  - After writing a message *d* (appended at the writer head position), we get `[_bcd]`.
+  1. After writing messages *a*, *b* ,*c* in an empty buffer of size 4, the buffer looks like `[abc_]`.
+     The writer head is on the next position after *c*. The reader head is on the first position (*a*).
+  1. After reading the first message (*a*) at the reader head position, we get `[_bc_]`.
+     The reader head moves to the next position after *a* (*b*).
+  1. After writing a message *d* (appended at the writer head position), we get `[_bcd]`.
 
-    Instead of shifting the entire buffer to create space at the end of the buffer for the next message (`[_bcd]` to `[bcd_]`),
-    the writer head moves to the next (empty) position which is at the beginning of the buffer.
+     Instead of shifting the entire buffer to create space at the end of the buffer for the next message (`[_bcd]` to `[bcd_]`),
+     the writer head moves to the next position after *d*, which is at the beginning of the buffer.
 
-    The buffer is actually a *ring* : when a header reaches the end of the buffer, it overflows at the beginning of the buffer, ready for the next message to write.
-    This permits an easy recycling of the buffer without shifting involved. 
+     The buffer is actually a *ring* : when a header reaches the end of the buffer, it overflows at the beginning of the buffer,
+     ready for the next message to be written.
+     This permits an easy recycling of the buffer without shifting involved. 
 
-  - After reading the next message (*b*), we get `[__cd]`. The reader head moves on *c*.
-  - After writing a message *e* (appended at the writer head position), we get `[e_cd]`. The writer head moves to the next empty position.
-  - After reading the two next messages (*c* and *d*), we get `[e___]`.
+  1. After reading the next message (*b*), we get `[__cd]`. The reader head moves on *c*.
+  1. After writing a message *e* ( at the writer head position), we get `[e_cd]`. The writer head moves to the next position after *e*.
+  1. After reading the two next messages (*c* and *d*), we get `[e___]`.
+     The reader head overflows at the beginning of the buffer, on the first postion, ready for the next message to be read (*e*).
+  1. After writing messages *f*, *g*, *h* (appended at the writer head position), we get `[efgh]`.
+     The writer head overflows and moves at the beggining of the buffer, on the first postion.
 
-    Again, the reader head overflows at the beginning of the buffer, ready for the next message to read (*e*).
+     Therefore, the reader and writer heads do overlap *after writing*, indicating that the buffer is *full*.
+
+  1. After reading the two next messages (*e* and *f*), we get `[__gh]`.
+     The reader head  moves on *g*.
+  1. After writing a message *i* (at the writer head position), we get `[i_gh]`.
+     The writer head moves to the position after *i*.
+  1. After reading the three next messages (*g*, *h* and *i*), we get `[____]`.
+     The reader head overflows and moves to the second position.
+
+     Therefore, the reader and writer heads do overlap *after reading*, indicating that the buffer is *empty*.
+
+  1. After writing a message *j* (at the writer head position), we get `[_j__]`.
 
 As said, the buffer is actually a ring:
-  - Reader and writer headed overflow at the beginning of the buffer array when they reach the end of the array.
-  - A message is written at writer head position, after which the writer head is moves to the next position in the array.
-  - A message is read at reader head position, after which the reader head is moves to the next position in the array.
-  - The buffer is full when the writer head reaches the reader head position after writing (i.e. sending a message in the bottle).
-  - The buffer is empty when the redaer head reaches the writer head position after reading (receiveing a message from the bottle).
+  - Reader and writer headed overflow at the beginning of the buffer when they reach its end.
+  - A message is written at writer head position, after which the writer head is moved to the next position.
+  - A message is read at reader head position, after which the reader head is moved to the next position.
+  - The buffer is full when the writer head reaches the reader head position *after writing* (i.e. sending a message in the bottle).
+  - The buffer is empty when the reader head reaches the writer head position *after reading* (i.e. receiveing a message from the bottle).
+
+### Buffer of unlimited capacity
+
+When a botlle is declared with an infinite (`UNLIMITED`) capacity, it is automatically expanded when the bottle is full:
+more space is created inthe buffer:
+
+  1. Suppose the buffer is `[__ab]`.
+  2. When *c* and *d* are written, the buffer goes `[cdab]` and the reader and writer heads are both on *a*, indicating that the buffer is full.
+  3. If *e* is written,
+     - before writing, space is added before the read head ad after the writer head: `[cd____ab]` ;
+     - the reader head is then on *a*, and the writer head after *d* ;
+     - *e* can then be written: `[cde___ab]`
+
+The number of empty spaces created is ruled by the (macro) function `QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE`
+which yelds the new overall capacity after expansion from the actual capacity.
+
+By default, the capacity is doubled:
+
+```c
+#define QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE(capacity) ((capacity)*2)
+```
+
+Therefore, in the previous example, the capacity is expanded from 4 to 8, creating 4 new positions in the buffer.
+
+On the opposite, the buffer is shrinked after reading in case the overall capacity exceeds `QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE(size)`
+where `size` is the number of messages in the buffer. All empty positions are removes before the reader head and after the writer head
+(this leading to a full buffer.)
 
 ### Bottle template
 
