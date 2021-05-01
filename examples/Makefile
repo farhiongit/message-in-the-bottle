@@ -1,12 +1,16 @@
-CFLAGS=-I.. -Wall
+CFLAGS+=-I.. -Wall
 #CFLAGS+=-O
 CFLAGS+=-g
 LDFLAGS=-pthread
 
-all: bottle_auto_var bottle_perf bottle_fifo_example bottle_example bottle_simple_example bottle_token_example hanoi
+all: build
+
+.PHONY: build
+build: bottle_auto_var bottle_perf bottle_fifo_example bottle_example bottle_simple_example bottle_token_example hanoi
+	@echo "Type 'make run' to execute."
 
 .PHONY: run
-run: all
+run: build
 	./bottle_auto_var
 	./bottle_fifo_example
 	./bottle_simple_example

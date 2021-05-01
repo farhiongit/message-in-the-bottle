@@ -3,8 +3,8 @@
 
 #include "bottle_impl.h"        // Include necessary stuff
 typedef const char *Message;
-DECLARE_BOTTLE (Message);       // Declare the template for type 'Message'
-DEFINE_BOTTLE (Message);        // Define the template for type 'Message'
+bottle_type_declare (Message);  // Declare the template for type 'Message'
+bottle_type_define (Message);   // Define the template for type 'Message'
 
 static void *
 eat (void *arg)                 // The thread that receives the messages
