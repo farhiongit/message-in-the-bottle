@@ -300,7 +300,7 @@ and the botlle is not closed.
     `BOTTLE_FILL` blocks until some receiver has
       retrieved at least one value previously sent (with `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`).
       
-      Note: if the bottle has `UNLIMITED` capacity, it is never full as its capacity increases automatically as necessary to accept new messages (like a skin ballon).
+      Note: if the bottle has `UNLIMITED` capacity, it can never be full as its capacity increases automatically as necessary to accept new messages (like a skin ballon).
 
 - `BOTTLE_FILL` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
@@ -319,7 +319,15 @@ Therefore `BOTTLE_FILL` returns 1 if a message has been sucessfully sent in the 
 
 #### Resources management
 
-In particular and unusual case where the message type *T* would be or would contain (in a structure) allocated resources (such as memory with `malloc`/`free` or file descriptor with `fopen`/`fclose` for instance),
+Messages are *passed by value* between the senders and receivers: when a message is sent in or recieved from a bottle, it is *copied*.
+This guarantees thread-safeness and independance between the sender thread and the receiver thread.
+
+  - whateveer the changes made by the sender on a message *after it was sent*, it will not affect the message received by the receiver:
+    the received message is an exact copy of the message as it was at the moment it was sent.
+  - whateveer the changes made by the receiver on a received message, it will not affect the message sent by the sender.
+
+Nevertheless, in particular and unusual case where the message type *T* would be or would contain (in a structure)
+pointers to allocated resources (such as memory with `malloc`/`free` or file descriptor with `fopen`/`fclose` for instance),
 the user program must respect those simple rules:
 
 - The **sender**:
@@ -332,8 +340,7 @@ the user program must respect those simple rules:
     and **does not belong to the sender anymore**.
 
 
-- The **receiver** *must*, after receiving a message
-  (i.e. after the call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`), and after use of the message,
+- The **receiver** *must*, after use of the received message (with a call to functions `BOTTLE_DRAIN` or `BOTTLE_TRY_DRAIN`),
   deallocate (release) all the resources of the message (those previously allocated by the sender).
 
 ### Closing communication
@@ -607,30 +614,34 @@ The FIFO queue of a bottle is defined as:
     struct {
       TYPE*   buffer;      // Array containing the messages (at most capacity)
       size_t  capacity;    // Maximum number of elements in the queue (size of the array)
-      size_t  size;        // Number of messages in the queue (<= capacity)
+      int     unlimited;   // Indicates that the capacity can be extended automatically as required
+      size_t  size;        // Number of messages currently in the queue (<= capacity)
       TYPE*   reader_head; // Position where to read the next value
       TYPE*   writer_head; // Position where to write the next value
-      int     unlimited;   // Indicates that the capacity can be extended automatically as required
     }
 ```
 
-where `TYPE` is the type of messages stored in the queue (this type is defined at creation of the bottle, see below.)
+where:
+  - `TYPE` is the type of messages stored in the queue (this type is defined at creation of the bottle, see below.)
+  - `capacity` is the capacity of the buffer (equal to 1 for `UNBUFFERED` bottles.)
+  - `size` is the number of messages currently in the bottle (sent but not read yet.)
+  - `unlimited` indicates (when non zero) that the capacity can be extended automatically as required (see below.)
 
-When a messag is added in the queue, it is copied (hollow copy) at some position in the buffer (`*pos = message`).
-When a messag is removes from the queue, it is copied (hollow copy) from some position in the buffer (`message = *pos`).
+When a message is added in the queue, it is copied at some position in the buffer (`*pos = message`).
+When a message is removes from the queue, it is copied from some position in the buffer (`message = *pos`).
 
 Let's consider a naïve implementation of the buffer where written messages are appended, starting from the beginning of the buffer.
-  - After writing messages *a*, *b* ,*c* in a buffer of size 4, the buffer would look like `[abc_]` where `_` indicates an empty position.
-  - After reading the first message (*a*), we get `[bc__]`.
-  - After writing a message *d* (appended at the end of the buffer), we get `[bcd_]`.
-  - After reading the next message (*b*), we get `[cd__]`.
-  - After writing a message *e* (appended at the end of the buffer), we get `[cde_]`.
-  - After reading the two next messages (*c* and *d*), we get `[e___]`.
+  1. After writing messages *a*, *b* ,*c* in a buffer of size 4, the buffer would look like `[abc_]` where `_` indicates an empty position.
+  1. After reading the first message (*a*), we get `[bc__]`.
+  1. After writing a message *d* (appended at the end of the buffer), we get `[bcd_]`.
+  1. After reading the next message (*b*), we get `[cd__]`.
+  1. After writing a message *e* (appended at the end of the buffer), we get `[cde_]`.
+  1. After reading the two next messages (*c* and *d*), we get `[e___]`.
 
 This requires shifting all the elements of the buffer every time it is read, which is time consuming (linear time with buffer size).
 
 To avoid shifting and to work at constant time whatever the size of the buffer,
-it is better to keep track of the next position where to write (the `writer_head`) and where to read (the `reader_head`).
+it is better to keep track of the next position where to write (the `writer_head`) and where to read (the `reader_head`):
   1. After writing messages *a*, *b* ,*c* in an empty buffer of size 4, the buffer looks like `[abc_]`.
      The writer head is on the next position after *c*. The reader head is on the first position (*a*).
   1. After reading the first message (*a*) at the reader head position, we get `[_bc_]`.
@@ -700,8 +711,10 @@ where `size` is the number of messages in the buffer. All empty positions are re
 
 ### Bottle template
 
-This section explains how things like `bottle(int) *b = bottle_create(int)` and `bottle_send (b, 5)` work.
-It uses a little bit of some kind of genericity.
+This section explains how the type of the messages can be defined at creation of the bottle (at compile-time) and
+how things like `bottle_t(int) *b = bottle_create(int)` and `bottle_send (b, 5)` work (the C-like style is used here). 
+
+`bottle_t(` *TYPE* `)` is in fact a template that is instanciated at compile-time with the type *TYPE* specified (it uses some kind of genericity.)
 
 When `bottle_type_declare(int)` and `bottle_type_define(int)` are added in the global part of the code,
 it creates the objet `bottle_int` and a bunch of functions like `bottle_create_int` and `bottle_send_int` (to name a few) behind the scene.
@@ -736,9 +749,9 @@ A call to `bottle_send(b, 5)` will therefore be translated into a call to `Fill(
 
 which in turn will be translated into a call to `bottle_send_int(b, 5)` at runtime.
 
-The names of the macros and functions are slightly diffrent in the code but this is the concept.
+The names of the macros and functions are slightly different in the code (where macro-like style is used) but this is the concept.
 
-This ideas come from [the blog of Randy Gaul](http://www.randygaul.net/2012/08/10/generic-programming-in-c/).
+This logic uses ideas from [the blog of Randy Gaul](http://www.randygaul.net/2012/08/10/generic-programming-in-c/).
 
 ### Optional arguments
 

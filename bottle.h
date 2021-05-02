@@ -77,7 +77,7 @@ enum { UNLIMITED = 0,
       TYPE*  buffer;      /* Array containing the messages */           \
       TYPE*  reader_head; /* Position where to read the next value */   \
       TYPE*  writer_head; /* Position where to write the next value */  \
-      size_t size;        /* Number of messages in the queue (<= capacity) */ \
+      size_t size;        /* Number of messages currently in the queue (<= capacity) */ \
       size_t capacity;    /* Maximum number of elements in the queue (size of the array) */ \
       int    unlimited;   /* Indicates that the capacity can be extended automatically as required */ \
     } queue;                                \

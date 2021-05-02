@@ -96,7 +96,7 @@
       errno = EPERM;                                           \
       return 0;                                                \
     }                                                          \
-    *q->writer_head = message; /* hollow copy */               \
+    *q->writer_head = message; /* copy */                      \
     if (!q->reader_head)                                       \
       q->reader_head = q->writer_head;                         \
     q->writer_head++;                                          \
@@ -113,7 +113,7 @@
       errno = EPERM;                                           \
       return 0;                                                \
     }                                                          \
-    *message = *q->reader_head; /* hollow copy */              \
+    *message = *q->reader_head; /* copy */                     \
     q->reader_head++;                                          \
     if (q->reader_head == q->buffer + q->capacity)             \
       q->reader_head = q->buffer;                              \
