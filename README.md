@@ -29,7 +29,7 @@ Under the hook, this pattern is a thread-safe FIFO message queue suited for thre
 It hides mutexed and thread synchronization complexity behind simple objects, called *bottles*, similar for example to the concept of *channels* found in language Go
 (which shows a nice and minimalistic grammar and overall simplicity, as compared to C++ or Java).
 
-The API is simple : declare and define a channel (*bottle*) and the type of messages bound to it, create a channel, send and receive messages, close and destroy the channel:
+The API is simple : declare and define a channel (*bottle*) and the type of messages which can be exchanged through it, create a channel, send and receive messages, close and destroy the channel:
 
 ```c
 #include <unistd.h>
@@ -72,7 +72,7 @@ main (void)
   bottle_close (bottle);        // close the bottle (tells the receiver threads that all messages have been sent.)
   for (pthread_t * p = eater; p < eater + sizeof (eater) / sizeof (*eater); p++)
     pthread_join (*p, 0);       // Waits for the receiver thread to finish its work (it uses the bottle).
-  bottle_destroy (bottle);      // Destroys the bottle once receiver threads are over.
+  bottle_destroy (bottle);      // destroy the bottle once receiver threads are over.
 }
 ```
 
@@ -142,7 +142,9 @@ This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.gi
 ## Insights of the user interface
 
 The user interface is available in two styles, a macro-like and a C-like style.
-Those two are strictly equivalent:
+The example above uses the C-style style, which is more natural and recommended.
+The macro-like style simply reminds that a lot of macros are behind the implementation of bottles.
+Both styles are strictly equivalent, can be mixed and switched.
 
 || Description          | Macro-like style                    | C-like style|
 |-|---------------------|-------------------------------------|-------------|
@@ -676,7 +678,7 @@ it is better to keep track of the next position where to write (the `writer_head
   1. After writing a message *j* (at the writer head position), we get `[_j__]`.
 
 As said, the buffer is actually a ring:
-  - Reader and writer headed overflow at the beginning of the buffer when they reach its end.
+  - Reader and writer heads overflow at the beginning of the buffer when they reach its end.
   - A message is written at writer head position, after which the writer head is moved to the next position.
   - A message is read at reader head position, after which the reader head is moved to the next position.
   - The buffer is full when the writer head reaches the reader head position *after writing* (i.e. sending a message in the bottle).
