@@ -19,7 +19,7 @@ eat (void *arg)                 // The thread that receives the messages
 int
 main (void)
 {
-  bottle_t (Message) * bottle = bottle_create (Message);        // create a bottle (on the sender side), unbuffered, for communication and synchronization
+  bottle_t (Message) * bottle = bottle_create (Message, UNBUFFERED);        // create a bottle (on the sender side), unbuffered, for communication and synchronization
 
   // 10 consumers
   pthread_t eater[10];

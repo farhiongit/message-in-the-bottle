@@ -22,6 +22,7 @@ DEFINE_BOTTLE (Point);
 static int
 process_message (Point p)
 {
+  (void) p;
   sleep (1);                    // Just to mimic thread processing the data.
   return 1;
 }
@@ -75,8 +76,8 @@ feed (void *arg)
     Point p;
     p.x = i;
     p.y = 7 * i;
-    int size = snprintf (0, 0, fmt, p.x, p.y);
-
+    int isize = snprintf (0, 0, fmt, p.x, p.y);
+    size_t size = (size_t) (isize >= 0 ? isize : 0);
     // The feeder is responsible for any required ressource allocation in the message.
     BOTTLE_ASSERT (p.s = malloc ((size + 1) * sizeof (*p.s)));
     snprintf (p.s, size + 1, fmt, p.x, p.y);
@@ -150,6 +151,10 @@ main (void)
     case UNBUFFERED:
       fprintf (stderr, "Bottle %1$p created (unbuffered).\n", (void *) bottle);
       break;
+    case UNLIMITED:
+      fprintf (stderr, "Bottle %1$p created (effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
+      break;
+    case DEFAULT:
     default:
       fprintf (stderr, "Bottle %1$p created (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
       break;
@@ -213,6 +218,7 @@ main (void)
     case UNLIMITED:
       fprintf (stderr, "Bottle %1$p destroyed (effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
       break;
+    case DEFAULT:
     default:
       fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
       break;

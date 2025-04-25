@@ -1,5 +1,5 @@
 /*******
- * Copyright 2018 Laurent Farhi
+ * Copyright 2018-2025 Laurent Farhi
  *
  *  This file is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -21,6 +21,10 @@
 ////////////////////////////////////////////////////
 
 /* A thread-safe, template, implementation of a message queue */
+
+/*TODO:
+   - Use C11 thread rather than explicit pthreads.
+ */
 
 #pragma once
 
@@ -53,8 +57,9 @@
     }\
   } while(0)
 
-enum { UNLIMITED = 0,
-       UNBUFFERED = 1 /* Default capacity for perfect thread synchronization */, };
+#define UNLIMITED  ((size_t) -1)          /* Unbound buffer size (not recommended) */
+#define UNBUFFERED ((size_t)  0)          /* Default unbuffered (à la Go) capacity for perfect thread synchronisation : communication succeeds only when the sender and receiver are both ready. */
+#define DEFAULT    ((size_t)  1)          /* Default (à la Rust) capacity for perfect thread synchronisation (see https://stackoverflow.com/a/53348817 and https://users.rust-lang.org/t/0-capacity-bounded-channel/68357) */
 
 #define DECLARE_BOTTLE( TYPE )     \
 \
@@ -80,6 +85,7 @@ enum { UNLIMITED = 0,
       size_t capacity;    /* Maximum number of elements in the queue (size of the array) */ \
       int    unlimited;   /* Indicates that the capacity can be extended automatically as required */ \
     } queue;                                \
+    size_t                       capacity; /* Capacity of the bottle. Can be equal to 0. See https://users.rust-lang.org/t/0-capacity-bounded-channel/68357/20 */ \
     int                          closed;    \
     int                          frozen;    \
     pthread_mutex_t              mutex;     \
@@ -90,13 +96,14 @@ enum { UNLIMITED = 0,
   } BOTTLE_##TYPE;                          \
 \
   BOTTLE_##TYPE *BOTTLE_CREATE_##TYPE( size_t capacity );  \
+  void BOTTLE_INIT_##TYPE (BOTTLE_##TYPE *self, size_t capacity);  \
   struct __useless_struct_to_allow_trailing_semicolon__
 
 #define BOTTLE( TYPE )  BOTTLE_##TYPE
 
-/// BOTTLE (T) * BOTTLE_CREATE ([T], [size_t capacity = UNBUFFERED])
+/// BOTTLE (T) * BOTTLE_CREATE ([T], [size_t capacity = DEFAULT])
 #define BOTTLE_CREATE1( TYPE ) \
-  BOTTLE_CREATE_##TYPE(1)
+  BOTTLE_CREATE_##TYPE(DEFAULT)
 #define BOTTLE_CREATE2( TYPE, capacity ) \
   BOTTLE_CREATE_##TYPE(capacity)
 #define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
@@ -159,13 +166,13 @@ enum { UNLIMITED = 0,
   do { (self)->vtable->Destroy ((self)); } while (0)
 
 /// size_t BOTTLE_CAPACITY (BOTTLE (T) *bottle)
-#define BOTTLE_CAPACITY(self) ((self)->queue.unlimited ? 0 : QUEUE_CAPACITY((self)->queue))
+#define BOTTLE_CAPACITY(self) ((self)->capacity)
 
-/// BOTTLE (T) * BOTTLE_DECL (variable_name, [T], [size_t capacity = UNBUFFERED])
+/// BOTTLE (T) * BOTTLE_DECL (variable_name, [T], [size_t capacity = DEFAULT])
 #if defined(__GNUC__) || defined (__clang__)
 #define BOTTLE_DECL3(var, TYPE, capacity)  \
 __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT_##TYPE (&var, capacity)
-#define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, 1)
+#define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, DEFAULT)
 #define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
 #endif
 

@@ -1,5 +1,5 @@
 /*******
- * Copyright 2018 Laurent Farhi
+ * Copyright 2018-2025 Laurent Farhi
  *
  *  This file is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -27,6 +27,7 @@
 
 #include "bottle.h"
 #include <stdlib.h>
+#include <stddef.h>
 #include <errno.h>
 
 #ifdef DEBUG
@@ -63,13 +64,13 @@
 \
   static void QUEUE_INIT_##TYPE (struct _queue_##TYPE *q, size_t capacity) \
   {                                                            \
-    q->capacity = (capacity == 0 ? 1 : capacity);              \
-    q->unlimited = (capacity == 0);                            \
-    q->size = 0;                                               \
+    q->unlimited = (capacity == (size_t) -1);                        \
+    q->capacity = ((q->unlimited || capacity == 0) ? 1 : capacity);  \
+    q->size = 0;                                                     \
     BOTTLE_ASSERT (q->buffer = malloc (q->capacity * sizeof (*q->buffer))); \
-    q->reader_head = 0;                                        \
-    q->writer_head = q->buffer;                                \
-  }                                                            \
+    q->reader_head = 0;                                              \
+    q->writer_head = q->buffer;                                      \
+  }                                                                  \
 \
   static void QUEUE_DISPOSE_##TYPE (struct _queue_##TYPE *q)   \
   {                                                            \
@@ -83,10 +84,11 @@
       size_t oldc = q->capacity;                               \
       q->capacity = QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE (q->capacity); \
       BOTTLE_ASSERT (q->capacity > oldc);                      \
-      TYPE *oldq = q->buffer;                                  \
+      ptrdiff_t reader_offset = q->reader_head - q->buffer;    \
+      ptrdiff_t writer_offset = q->writer_head - q->buffer;    \
       BOTTLE_ASSERT (q->buffer = realloc (q->buffer, q->capacity * sizeof (*q->buffer))); \
-      q->reader_head = q->buffer + (q->reader_head - oldq) + (q->capacity - oldc);\
-      q->writer_head = q->buffer + (q->writer_head - oldq);    \
+      q->reader_head = q->buffer + reader_offset + (q->capacity - oldc); \
+      q->writer_head = q->buffer + writer_offset;             \
       for (TYPE* p = q->buffer + q->capacity - 1 ; p >= q->reader_head ; p--) \
         *p = *(p - (q->capacity - oldc));                      \
     }                                                          \
@@ -141,10 +143,11 @@
         BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);                \
       if (q->writer_head == q->buffer + q->capacity)           \
         q->writer_head = q->buffer;                            \
-      TYPE *oldq = q->buffer;                                  \
+      ptrdiff_t reader_offset = q->reader_head - q->buffer;    \
+      ptrdiff_t writer_offset = q->writer_head - q->buffer;    \
       BOTTLE_ASSERT (q->buffer = realloc (q->buffer, q->capacity * sizeof (*q->buffer))); \
-      q->reader_head = q->buffer + (q->reader_head - oldq);    \
-      q->writer_head = q->buffer + (q->writer_head - oldq);    \
+      q->reader_head = q->buffer + reader_offset;              \
+      q->writer_head = q->buffer + writer_offset;              \
     }                                                          \
     return 1;                                                  \
   }                                                            \
@@ -158,6 +161,7 @@
     BOTTLE_ASSERT (!pthread_mutex_init (&self->mutex, 0));     \
     BOTTLE_ASSERT (!pthread_cond_init (&self->not_empty, 0));  \
     BOTTLE_ASSERT (!pthread_cond_init (&self->not_full, 0));   \
+    self->capacity = capacity;                                 \
     QUEUE_INIT_##TYPE (&self->queue, capacity);                \
   }                                                            \
 \
@@ -193,9 +197,13 @@
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
       BOTTLE_ASSERT (!pthread_cond_signal (&self->not_empty)); \
       ret = 1;                                                 \
+      if (self->capacity == 0)                                 \
+        /* Barrier to synchronise the sender and the receiver */ \
+        while (BOTTLE_IS_FULL (self))                          \
+          BOTTLE_ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex));   \
     }                                                          \
     else                                                       \
-      BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);  \
+      BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);                  \
     BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     return ret;                                                \
   }                                                            \
@@ -219,6 +227,10 @@
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
       BOTTLE_ASSERT (!pthread_cond_signal (&self->not_empty)); \
       ret = 1;                                                 \
+      if (self->capacity == 0)                                 \
+        /* Barrier to synchronise the sender and the receiver */ \
+        while (BOTTLE_IS_FULL (self))                          \
+          BOTTLE_ASSERT (!pthread_cond_wait (&self->not_full, &self->mutex));   \
     }                                                          \
     else                                                       \
       errno = EWOULDBLOCK;                                     \
@@ -241,7 +253,7 @@
     else if (self->closed)                                     \
       errno = ECONNABORTED;                                    \
     else                                                       \
-      BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);  \
+      BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);                  \
     BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     return ret;                                                \
   }                                                            \

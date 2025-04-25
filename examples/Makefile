@@ -1,6 +1,6 @@
 CFLAGS+=-I.. -Wall
 #CFLAGS+=-O
-CFLAGS+=-g
+#CFLAGS+=-g
 LDFLAGS=-pthread
 
 all: build

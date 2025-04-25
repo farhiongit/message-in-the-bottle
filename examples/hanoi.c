@@ -83,7 +83,7 @@ stack_print (enum tower name)
   Stack *stack = stack_get_from_name (name);
   if (!stack)
     return;
-  fprintf (stderr, "%c:", stack->name);
+  fprintf (stderr, "%c:", (char) stack->name);
   if (stack->hight)
     for (unsigned long i = 0; i < stack->hight; i++)
       fprintf (stderr, " %lu", stack->rings[i]);
@@ -179,7 +179,7 @@ main (int argc, char **argv)
   Move m;
   while (bottle_recv (solver_args.moves, m))
   {
-    fprintf (stderr, "Move ring %lu from %c to %c.\n", m.ring, m.from, m.to);
+    fprintf (stderr, "Move ring %lu from %c to %c.\n", m.ring, (char) m.from, (char) m.to);
     move_ring (m.ring, m.from, m.to);
   }
 #endif
