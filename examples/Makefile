@@ -17,6 +17,6 @@ run: build
 	./bottle_token_example
 	./bottle_example
 	./hanoi
-	time ./bottle_perf
+	./bottle_perf
 
 hanoi: CFLAGS+=-DTRACE

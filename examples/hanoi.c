@@ -171,13 +171,13 @@ main (int argc, char **argv)
 #ifdef TRACE
   for (unsigned long ring = nb_rings; ring > 0; ring--)
     stack_add (A, ring);
-  solver_args.moves = bottle_create (Move, UNLIMITED);
+  solver_args.moves = bottle_create (Move, UNLIMITED);  // The queue has infinite size.
 #endif
   pthread_create (&solver, 0, solve, &solver_args);
 
 #ifdef TRACE
   Move m;
-  while (bottle_recv (solver_args.moves, m))
+  while (bottle_recv (solver_args.moves, &m))
   {
     fprintf (stderr, "Move ring %lu from %c to %c.\n", m.ring, (char) m.from, (char) m.to);
     move_ring (m.ring, m.from, m.to);
@@ -186,7 +186,9 @@ main (int argc, char **argv)
 
   void *ret;
   pthread_join (solver, &ret);
-  printf ("Moving %lu rings from %c to %c requires %lu moves.\n", nb_rings, A, C, *(unsigned long*)ret);
+  unsigned long nb_moves = *(unsigned long*)ret;
+  printf ("Moving %lu rings from %c to %c requires %lu moves.\n", nb_rings, A, C, nb_moves);
+  printf ("%s.\n", (nb_moves + 1 == 1UL << nb_rings) ? "OK" : "NOK");
   free (ret);
 #ifdef TRACE
   bottle_destroy (solver_args.moves);

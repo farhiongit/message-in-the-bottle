@@ -17,6 +17,7 @@
 ////////////////////////////////////////////////////
 // Author:  Laurent Farhi
 // Date:    08/05/2017
+// Revised: 24/05/2025
 // Contact: lfarhi@sfr.fr
 ////////////////////////////////////////////////////
 
@@ -36,30 +37,9 @@
 #include <errno.h>
 #include <stdio.h>
 
-// To be translated.
-#define TBT(text) (text)
-
-#define BOTTLE_ASSERT3(cond, msg, fatal) \
-  do {\
-    if (!(cond)) \
-    {\
-      const char* _msg = msg; \
-      if (_msg && *_msg) fprintf(stderr, TBT("%1$s: %2$s"), fatal ? TBT("FATAL ERROR") : TBT("WARNING"), TBT(_msg));\
-      if (fatal) pthread_exit(0) ;\
-    }\
-  } while(0)
-#define BOTTLE_ASSERT(cond) \
-  do {\
-    if (!(cond)) \
-    {\
-      fprintf(stderr, TBT("%6$s: Thread %5$#lx: %1$s (condition '%1$s' is false in function %2$s at %3$s:%4$i)\n"),#cond,__func__,__FILE__,__LINE__, pthread_self(), TBT("FATAL ERROR"));\
-      pthread_exit(0) ;\
-    }\
-  } while(0)
-
-#define UNLIMITED  ((size_t) -1)          /* Unbound buffer size (not recommended) */
-#define UNBUFFERED ((size_t)  0)          /* Default unbuffered (à la Go) capacity for perfect thread synchronisation : communication succeeds only when the sender and receiver are both ready. */
-#define DEFAULT    ((size_t)  1)          /* Default (à la Rust) capacity for perfect thread synchronisation (see https://stackoverflow.com/a/53348817 and https://users.rust-lang.org/t/0-capacity-bounded-channel/68357) */
+#define UNLIMITED    ((size_t) -1)          /* Unbound buffer size (not recommended) */
+#define UNBUFFERED   ((size_t)  0)          /* Unbuffered capacity for perfect thread synchronisation */
+#define DEFAULT      UNBUFFERED             /* Default is unbuffered (à la Go) */
 
 #define DECLARE_BOTTLE( TYPE )     \
 \
@@ -71,6 +51,8 @@
     int  (*TryFill) (struct _BOTTLE_##TYPE *self, TYPE message);  \
     int (*Drain) (struct _BOTTLE_##TYPE *self, TYPE *message);    \
     int (*TryDrain) (struct _BOTTLE_##TYPE *self, TYPE *message); \
+    void (*Plug) (struct _BOTTLE_##TYPE *self);                   \
+    void (*Unplug) (struct _BOTTLE_##TYPE *self);                 \
     void (*Close) (struct _BOTTLE_##TYPE *self);                  \
     void (*Destroy) (struct _BOTTLE_##TYPE *self);                \
   } _BOTTLE_VTABLE_##TYPE;                                        \
@@ -85,12 +67,19 @@
       size_t capacity;    /* Maximum number of elements in the queue (size of the array) */ \
       int    unlimited;   /* Indicates that the capacity can be extended automatically as required */ \
     } queue;                                \
-    size_t                       capacity; /* Capacity of the bottle. Can be equal to 0. See https://users.rust-lang.org/t/0-capacity-bounded-channel/68357/20 */ \
+    size_t                       capacity; /* Declared capacity of the bottle at creation.
+                                              Can be > 0 (and not -1) : buffered ;
+                                              can be equal to 0, see https://users.rust-lang.org/t/0-capacity-bounded-channel/68357/20 : unbuffered ;
+                                              can be -1 : unbounded */ \
     int                          closed;    \
     int                          frozen;    \
     pthread_mutex_t              mutex;     \
     pthread_cond_t               not_empty; \
     pthread_cond_t               not_full;  \
+    int                          not_reading;\
+    pthread_cond_t               reading;   \
+    int                          not_writing;\
+    pthread_cond_t               writing;   \
     const _BOTTLE_VTABLE_##TYPE *vtable;    \
     TYPE __dummy__;                         \
   } BOTTLE_##TYPE;                          \
@@ -122,37 +111,27 @@
   ((self)->vtable->TryFill ((self), ((self)->__dummy__)))
 #define BOTTLE_TRY_FILL(...) VFUNC(BOTTLE_TRY_FILL, __VA_ARGS__)
 
-/// int BOTTLE_DRAIN (BOTTLE (T) *bottle, [T message])
+/// int BOTTLE_DRAIN (BOTTLE (T) *bottle, [T *message])
 #define BOTTLE_DRAIN2(self, message)  \
-  ((self)->vtable->Drain ((self), &(message)))
+  ((self)->vtable->Drain ((self), (message)))
 #define BOTTLE_DRAIN1(self)  \
   ((self)->vtable->Drain ((self), &((self)->__dummy__)))
 #define BOTTLE_DRAIN(...) VFUNC(BOTTLE_DRAIN, __VA_ARGS__)
 
-/// int BOTTLE_TRY_DRAIN (BOTTLE (T) *bottle, [T message])
+/// int BOTTLE_TRY_DRAIN (BOTTLE (T) *bottle, [T *message])
 #define BOTTLE_TRY_DRAIN2(self, message)  \
-  ((self)->vtable->TryDrain ((self), &(message)))
+  ((self)->vtable->TryDrain ((self), (message)))
 #define BOTTLE_TRY_DRAIN1(self)  \
   ((self)->vtable->TryDrain ((self), &((self)->__dummy__)))
 #define BOTTLE_TRY_DRAIN(...) VFUNC(BOTTLE_TRY_DRAIN, __VA_ARGS__)
 
 /// void BOTTLE_PLUG (BOTTLE (T) *bottle)
 #define BOTTLE_PLUG(self)  \
-  do { BOTTLE_ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
-       (self)->frozen = 1 ;                                    \
-       BOTTLE_ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
-     } while(0)
+  do { (self)->vtable->Plug ((self)); } while (0)
 
 /// void BOTTLE_UNPLUG (BOTTLE (T) *bottle)
 #define BOTTLE_UNPLUG(self)  \
-  do { BOTTLE_ASSERT (!pthread_mutex_lock (&(self)->mutex));   \
-       (self)->frozen = 0 ;                                    \
-       BOTTLE_ASSERT (!pthread_mutex_unlock (&(self)->mutex)); \
-       BOTTLE_ASSERT (!pthread_cond_signal (&self->not_full)); \
-     } while(0)
-
-/// int BOTTLE_IS_PLUGGED (BOTTLE (T) *bottle)
-#define BOTTLE_IS_PLUGGED(self) ((self)->frozen)
+  do { (self)->vtable->Unplug ((self)); } while (0)
 
 /// void BOTTLE_CLOSE (BOTTLE (T) *bottle)
 #define BOTTLE_CLOSE(self)  \
@@ -197,6 +176,5 @@ __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT
 
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)
-#define bottle_is_plugged(self)   BOTTLE_IS_PLUGGED(self)
 
 #endif

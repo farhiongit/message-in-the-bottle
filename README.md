@@ -1,42 +1,128 @@
 # Procuder/consumer pattern for thread communication and/or synchronisation in C.
 
+> The ultimate synchronisation mechanism between threads through messages (channels as in Go), for C language, extended.
+
 > This project implements a communication and synchronisation mechanism between producer and consumer threads.
 
-Some threads can produce and send messages, which are received and consumed by other threads.
-Exchanged message are strongly type -- they are bound to a chosen (or void) type of objects specific to each channel of communication.
+## General description
 
-Besides, communication channels can be synchronised with an adjustable constraint:
+There's a famous concept in Go called channels :
 
-  - either tight: producer (or team of producers) and consumer (or team of consumers) work at same pace ;
-  - or loose : producer (or team of producers) and consumer (or team of consumers) work at their own pace ;
-  - or anything in between.
+  - Some threads can produce and send messages, which are received and consumed by other threads.
+  - Exchanged message are strongly type -- they are bound to a chosen (or void) type of objects specific to each channel of communication.
 
 The pattern of message driven synchronisation is of interest because it is intuitive and of a higher level
 of abstraction than mutexes and conditions:
 
-- some threads `A` (usually called the senders or the producers) fill the message queue ;
-- some other threads `B` (usually called the receivers or the consumers) eat up the message queue.
+- some threads `A` (usually called the senders or the producers) fill a queue of messages ;
+- some other threads `B` (usually called the receivers or the consumers) eat up the queue of messages.
 
 Threads B are gracefully synchronised with threads A.
 
 Therefore, I grabbed my copy of the (still great) book "Programming with POSIX threads" by Butenhof, where the pattern is mentioned, to
 implement it for my favourite language, C.
 
-And here it is.
+And here it is, with some improvements compared to Go : communication channels can be synchronised with an adjustable constraint:
+
+  - either tight: producer (or team of producers) and consumer (or team of consumers) work at same pace ;
+  - or loose : producer (or team of producers) and consumer (or team of consumers) work at their own pace ;
+  - or anything in between.
 
 Under the hook, this pattern is a thread-safe FIFO message queue suited for thread synchronisation.
 
 It hides mutexes and thread synchronisation complexity behind simple objects, called *bottles*, similar for example to the concept of *channels* found in language Go
 (which shows a nice and minimalist grammar and overall simplicity, as compared to C++ or Java).
 
-The API is simple : declare and define a channel (*bottle*) and the type of messages which can be exchanged through it, create a channel, send and receive messages, close and destroy the channel:
+## Quick start
+
+The API is simple :
+
+  1. define the type of messages which can be exchanged through the channel, here called *bottle* ;
+  2. declare and define the associated type of channel (*bottle*) ;
+  3. create a channel ;
+  4. send messages ;
+  5. close the channel ;
+  6. receive messages ;
+  7. destroy the channel.
+
+### 1. Define the type of messages to exchange
+
+If the type of messages is a basic type (int, double, char, ...), this step is not needed.
+
+Otherwise, define the type with a single word identifier.
+
+For instance:
+
+```c
+typedef int *pi_t;
+typedef longle double ld_t;
+typedef int (*f_i2i_t) (int);
+typedef struct { ... } msg_t;
+```
+
+### 2. Declare and define the type of channel to use
+
+If the type of message to exchange is `msg_t` as defined on step 1, add this on top of your file:
+
+```c
+#include "bottle_impl.h"        // Include necessary stuff
+bottle_type_declare (msg_t);    // Declare the template of bottle
+bottle_type_define (msg_t);     // Define the template of bottle
+```
+
+### 3. Create the bottle on the sender side
+
+On the sender side, usually the main thread, create a bottle:
+
+```c
+bottle_t (msg_t) * bottle = bottle_create (msg_t);
+```
+
+### 4. Send messages (on the sender side obviously)
+
+If `msg` is a variable of type `msg_t`:
+
+```c
+msg_t msg;
+/* initialise msg here */
+bottle_send (bottle, msg);
+```
+
+### 5. Close the bottle on the sender side once all messages have been sent
+
+On the sender side, usually the main thread, create a bottle:
+
+```c
+bottle_close (bottle);
+```
+
+### 6. Receive messages (on the receiver side obviously)
+
+This step runs synchronously with step 4 on the receiver threads (one or several).
+
+If `msg` is a variable of type `msg_t`:
+
+```c
+msg_t msg;
+bottle_recv (bottle, msg);
+```
+
+### 7. Destroy the bottle on the sender side after all messages have been received by the receiver threads
+
+On the sender side, usually the main thread, create a bottle:
+
+```c
+bottle_destroy (bottle);
+```
+
+### Example
 
 ```c
 #include <unistd.h>
 #include <stdio.h>
 
 #include "bottle_impl.h"        // Include necessary stuff
-typedef const char *Message;
+typedef const char *Message;    // Define the type of objects to exchange between threads
 bottle_type_declare (Message);  // Declare the template for type 'Message'
 bottle_type_define (Message);   // Define the template for type 'Message'
 
@@ -45,7 +131,7 @@ eat (void *arg)                 // The thread that receives the messages
 {
   bottle_t (Message) * bottle = arg;
   Message m;
-  while (bottle_recv (bottle, m))       // Receive a message
+  while (bottle_recv (bottle, &m))       // Receive a message
     printf ("...%s\n", m);
   return 0;
 }
@@ -80,26 +166,69 @@ Details, discussions and examples are given below.
 
 **Have fun !**
 
-## Thread synchronisation through messages
+## Thread communication through messages
 
-Threads can synchronise using the producer/consumer pattern. Consumer threads (possibly several) trigger when they receive
+Threads can communicate and synchronise using the producer/consumer pattern. Consumer threads (possibly several) trigger when they receive
 messages sent by producer threads (possibly several).
 
 Each message is consumed by at most one consumer thread.
 
 Messages are managed in a thread-safe message queue (called *bottle* thereafter).
 
+The size of the message queue can be chosen at creation of a bottle with an optional argument *capacity* :
+
+  - 0, `UNBUFFERED` or `DEFAULT` (unbuffered, à la Go) : threads exchanging messages are then *strictly synchronised*. This is the default and *recommended* option.
+
+      - Communication succeeds only when the sender and receiver are both ready.
+        Think of it as a hand delivery between the sender and the receiver. Both have to meet and to wait for each other.
+      - It defines a meeting point that guaranties that a sender and a receiver in *two different threads* have to be ready in order to exchange a message.
+        A sending thread can't receive its own message.
+      - When a message is sent on the synchronous channel, it blocks the calling sending thread until there is another thread attempting to receive a message
+        from the channel, at which point the receiving thread gets the message and both threads continue execution.
+      - When a message is received from the channel, it blocks the calling receiving thread until there is another thread attempting to send a message on the
+        channel, at which point both threads continue execution.
+
+  - 1 (buffered, à la Rust) : threads exchanging messages are then *loosely synchronised*.
+
+      - Senders and receivers threads run at the same pace, messages being alternatively sent and received (thus synchronously).
+        Think of it as a delivery of a package in a mailbox: the sender and the receiver don't need to meet but they have to keep coordinated.
+      - A sender thread can send a message without waiting for a receiver to read it : the receiver might read the pending message later (thus loose synchronicity).
+      - A thread could receive a message it has previously sent (should a thread send and receive messages through the same bottle, which is unusual).
+        This might lead to races between the sender and the receiver (see the example [`bottle_perf.c`, test2](examples/bottle_perf.c)).
+
+  - N >= 2 : threads are *not synchronised*.
+
+      - Sent messages are guaranteed to be received in the exact order they were sent. Sending threads block if the number of pending message would exceed N.
+
+  - `UNLIMITED` : threads are *not synchronised* as above but the size of the queue grows and shrinks as needed.
+
+      - Sending threads *never block*.
+
 ### Unbuffered message queue
 
-The created message queue is unbuffered by default.
-Such an unbuffered queue is suitable for a tight synchronisation between threads running concurrently.
+The created bottles are *unbuffered by default*.
+Such an unbuffered queue is suitable for a tight synchronisation between threads running concurrently whereas buffered channels are not.
+
+See [here](https://wingolog.org/archives/2017/06/29/a-new-concurrent-ml) for an analysis of thread synchronisation through messages, which reads something like:
+
+>  An asynchronous (buffered) queue is not a channel, at least in its classic sense. As they were originally formulated in "Communicating Sequential Processes" by Tony Hoare,
+>  channels are meeting-places.
+>  Processes meet at a channel to exchange values; whichever party arrives first has to wait for the other party to show up.
+>  The message that is handed off in a channel send/receive operation is never "owned" by the channel; it is either owned by a sender who is
+>  waiting at the meeting point for a receiver, or it's accepted by a receiver. After the transaction is complete, both parties continue on.
+>
+>  Meeting-place (unbuffered) channels are strictly more expressive than buffered channels.
+>  - In Go (and in this herewith implementation in C), whose channels are unbuffered by default, you can use a channel for *deterministic* thread communication.
+>  - On the contrary, implementation of channels in Rust are effectively a minimum buffer size of 1 and therefore are not strict CSP.
+
+See the example [`bottle_perf.c`, test2](examples/bottle_perf.c) for an illustration of this discussion.
+Also read [here](https://stackoverflow.com/a/53348817) and [there](https://users.rust-lang.org/t/0-capacity-bounded-channel/68357) for more.
 
 ### Buffered message queue
 
-Even if unbuffered queues are efficient in most cases, buffered queues can be needed for specific use cases:
+Even if unbuffered queues are required for thread synchronisation, buffered queues can be needed for specific use cases:
 
-- to limit the number of thread workers,
-- in case of a very high rate (more than 100k per second) of exchanged messages
+- In case of a very high rate (more than 100k per second) of exchanged messages
   between the sender thread and the receiver thread,
   where context switch overhead between threads would be counter-productive. The buffer capacity will allow to process
   sending and receiving messages by chunks, therefore reducing the number of context switch.
@@ -107,7 +236,7 @@ Even if unbuffered queues are efficient in most cases, buffered queues can be ne
   Using a buffered message queue avoids blocking the sender inadequately,
   where an unbuffered queue would tune the pace of the sender on the one of the receiver, slowing down the sender thread.
 
-For this purpose, an optional argument *capacity* can be passed at creation of a message queue.
+The capacity of the message queue is tunable, from 1 to infinity:
 
 - A *capacity* set to a positive integer defines a buffered queue of fixed and limited capacity.
 
@@ -119,28 +248,12 @@ For this purpose, an optional argument *capacity* can be passed at creation of a
     `BOTTLE_CLOSE` need not be used in this case.
     There is such an example below.
 
-- A *capacity* set to `DEFAULT` defines an queue, suitable for most purposes.
-
-  This is the *recommended choice* for thread synchronisation through messages.
-  Senders and receivers run at the same pace, messages being alternatively sent and received.
-  This is the Rust flavour of channels.
-
-- A *capacity* set to `UNBUFFERED` defines an unbuffered queue, as well suitable for most purposes.
-
-  This is also a good choice for thread synchronisation through messages.
-  Senders and receivers run at the same pace, messages being alternatively sent and received.
-  But, compared to `DEFAULT`, `UNBUFFERED` defines an extra barrier that guaranties that a sender and a receiver have to be ready in order to exchange a message.
-  In other words, the sender will be put on hold until the receiver is ready to consume a message and notify the sender.
-  This is the Go flavour of channels.
-  Read https://stackoverflow.com/a/53348817 and https://users.rust-lang.org/t/0-capacity-bounded-channel/68357 for more.
-
-- A *capacity* set to `UNLIMITED` defines a queue of infinite capacity.
+- A *capacity* set to `UNLIMITED` defines a queue of (almost) infinite capacity.
 
   This configuration allows easy communication between producers and consumers without any constraints on synchronisation.
   It can be useful for asynchronous I/O for example, as in [`hanoi.c`](examples/hanoi.c).
 
   It allocates and desallocates capacity dynamically as needed for messages in the pipe between producers and consumers.
-  It is therefore slower than a `DEFAULT`, `UNBUFFERED` queue or a queue with fixed capacity.
   It should be used with care as it could exhaust memory if the producer rate exceeds dramatically the consumer rate.
 
 Buffered queues are implemented as pre-allocated arrays rather than as conventional linked-list:
@@ -148,7 +261,7 @@ elements of the array are reused to transport all messages,
 whereas with a linked list, each message would require a dynamically allocated new element in the list, adding memory management overhead.
 This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.github.io/disruptor/).
 
-*As said before, the usage of buffered queues is neither required nor recommended for thread synchronisation, as it would partly unsynchronise threads and uses a larger amount of memory ; `DEFAULT` queues are suitable for most purposes.*
+*As said before, the usage of buffered queues is neither required nor recommended for thread synchronisation, as it would partly unsynchronise threads and uses a larger amount of memory ; `DEFAULT` unbuffered queues are suitable for most purposes.*
 
 ## Insights of the user interface
 
@@ -181,7 +294,6 @@ Both styles are strictly equivalent, can be mixed and switched.
 ||Plug                  | `BOTTLE_PLUG`                       | `bottle_plug`
 ||Unplug                | `BOTTLE_UNPLUG`                     | `bottle_unplug`
 |**Properties**         |
-||Is plugged            | `BOTTLE_IS_PLUGGED`                 | `bottle_is_plugged`
 ||Is closed             | `BOTTLE_IS_CLOSED`                  | `bottle_is_closed`
 ||Get buffer capacity   | `BOTTLE_CAPACITY`                   | `bottle_capacity`
 
@@ -249,7 +361,7 @@ int main (void)
   BOTTLE_DECL (b, time_t);       // Declare an automatic variable b of type bottle_t (time_t)
   bottle_send (&b, time (0));    // Send a message through the bottle
   time_t val;
-  bottle_recv (&b, val);         // Receive a message through the bottle and store it in `val`
+  bottle_recv (&b, &val);        // Receive a message through the bottle and store it in `val`
   // b is deallocated automatically when going out of scope.
 }
 ```
@@ -265,16 +377,11 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 
 #### Receiving messages
 
-> int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T*& message])
+> int **BOTTLE_DRAIN** (BOTTLE (*T*) \*bottle, [*T* *message])
 >
 > *The second argument `message` is an optional variable name. If omitted, the bottle is drained but the message is not fetched and is lost.*
->
-> *It is of type T& (a reference to a variable, *à la C++*).
-> It is passed as a **reference**, and not as a pointer to T.
-> As such, it might be modified by the callee (just a little bit of macro magic here).*
 
-
-The receivers can receive messages (draining form the tap), as long as the bottle is not empty and not closed, by calling `BOTTLE_DRAIN (`*bottle*`, `*message*`)`.
+The receivers can receive messages (draining form the tap), as long as the bottle is not empty and not closed, by calling `BOTTLE_DRAIN`.
 The received message feeds the variable `message`.
 
 - `BOTTLE_DRAIN` returns 0 immediately (with `errno` set to `ECONNABORTED`) if there is no data to receive
@@ -333,7 +440,7 @@ Therefore `BOTTLE_FILL` returns 1 if a message has been successfully sent in the
 #### Resources management
 
 Messages are *passed by value* between the senders and receivers: when a message is sent in or received from a bottle, it is *copied*.
-This guarantees thread-safeness and independence between the sender thread and the receiver thread.
+This guarantees thread-safety and independence between the sender thread and the receiver thread.
 
   - whatever the changes made by the sender on a message *after it was sent*, it will not affect the message received by the receiver:
     the received message is an exact copy of the message as it was at the moment it was sent.
@@ -379,9 +486,9 @@ The call to `BOTTLE_CLOSE`, *on the sender side*:
 
 `BOTTLE_CLOSE` acts as if it were sending an end-of-file in the bottle.
 
-    Therefore, the call to `BOTTLE_CLOSE` *must be done*
-    after the senders have finished their work (either at the end
-    or sequentially just after the sender treatment).
+> Therefore, the call to `BOTTLE_CLOSE` *must be done*
+> after the senders have finished their work (either at the end
+> or sequentially just after the sender treatment).
 
 Notes:
 
@@ -402,7 +509,7 @@ and `BOTTLE_DESTROY`.
 
 #### Unblocking message queue functions
 
-> int **BOTTLE_TRY_DRAIN** (BOTTLE (*T*) \*bottle, [*T* message])
+> int **BOTTLE_TRY_DRAIN** (BOTTLE (*T*) \*bottle, [*T* *message])
 >
 > *The second argument is optional. If omitted, the bottle is drained but the message is lost.*
 
@@ -417,8 +524,9 @@ These functions return immediately without blocking. *They are **not** suited fo
 When used, the message queue looses its thread-synchronisation feature and
 behaves like a simple thread-safe FIFO message queue:
 
-- Receivers can receive messages without blocking with `BOTTLE_TRY_DRAIN (`*bottle*`, `*message*`)`.
+- Receivers can receive messages without blocking with `BOTTLE_TRY_DRAIN (`*bottle*`, *`*message*`)`.
 
+    - `BOTTLE_TRY_DRAIN` returns 0 (with `errno` set to `ENOTSUP`) if the bottle is unbuffered.
     - `BOTTLE_TRY_DRAIN` returns 0 (with `errno` set to `ECONNABORTED`) if the bottle is empty and closed.
     - `BOTTLE_TRY_DRAIN` returns 0 (with `errno` set to `EWOULDBLOCK`) if the bottle is empty.
     - Otherwise, it receives a *message* (it modifies the value of the second argument *message*)
@@ -426,15 +534,13 @@ behaves like a simple thread-safe FIFO message queue:
 
 - Senders can send messages without blocking with `BOTTLE_TRY_FILL (`*bottle*`, `*message*`)`.
 
+    - `BOTTLE_TRY_FILL` returns 0 (with `errno` set to `ENOTSUP`) if the bottle is unbuffered.
     - `BOTTLE_TRY_FILL` returns 0 if the bottle is closed (with `errno` set `ECONNABORTED`).
-    This most probably indicates an error in the user program as it should be avoided to close a bottle
-    while senders are still using it.
+      This most probably indicates an error in the user program as it should be avoided to close a bottle
+      while senders are still using it.
     - `BOTTLE_TRY_FILL` returns 0 if the bottle is plugged (with `errno` set `EWOULDBLOCK`) or already full.
-    This indicates that a call to `BOTTLE_FILL` would have blocked.
+      This indicates that a call to `BOTTLE_FILL` would have blocked.
     - Otherwise, it sends a *message* in the bottle and returns 1.
-
-Notice that the second argument *message* is of type *T*, and not a pointer to *T*,
-even though it might be modified by `BOTTLE_TRY_DRAIN` (macro magic here).
 
 #### Halting communication
 
@@ -443,6 +549,8 @@ even though it might be modified by `BOTTLE_TRY_DRAIN` (macro magic here).
 > void **BOTTLE_UNPLUG** (BOTTLE (*T*) \*bottle)
 
 The communication between sender and receiver threads can be stopped and restarted at will if needed.
+This could be used by the receiver or a third thread to control the sender.
+
 The mouth of the bottle can be:
 
 - plugged (stopping communication) with `BOTTLE_PLUG`,
@@ -481,15 +589,22 @@ DEFINE_BOTTLE (TextMessage);        // Defines the usage of bottles for the user
 
 ### Source files
 
-- [`bottle.h`](bottle.h) declares the user interface documented here (about 100 lines of source code).
-- [`bottle_impl.h`](bottle_impl.h) defines the user programming interface (about 200 lines of source code).
+- [`bottle.h`](bottle.h) declares the user interface documented here.
+- [`bottle_impl.h`](bottle_impl.h) defines the user programming interface.
 - [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h). It permits usage of optional parameters in function signatures.
+
+In case a library interface would expose a bottle,
+
+- [`bottle.h`](bottle.h) should be included in the header of the library ;
+- [`bottle_impl.h`](bottle_impl.h) should be included in the implementation of the library.
 
 ## Examples
 
 All sources should be compiled with the option `-pthread`.
 
-### Unbuffered bottle: Thread synchronisation
+### Unbuffered bottle
+
+#### Thread synchronisation
 
 [`bottle_example.c`](examples/bottle_example.c) is a complete example of a program (compile with option `-pthread`)
 using a synchronised thread-safe FIFO message queue.
@@ -593,7 +708,7 @@ Each instance of a bottle :
   - contains a FIFO queue `queue` (see below.)
   - two states `closed` and `frozen` indicating a bottle was closed or plugged respectively.
 
-### Thread synchronization
+### Thread synchronisation
 
 The pattern for a thread-safe FIFO queue (that's what a bottle is) is explained by Butenhof in his book "Programming with POSIX threads".
 
@@ -643,7 +758,7 @@ where:
 When a message is added in the queue, it is copied at some position in the buffer (`*pos = message`).
 When a message is removes from the queue, it is copied from some position in the buffer (`message = *pos`).
 
-Let's consider a naïve implementation of the buffer where written messages are appended, starting from the beginning of the buffer.
+Let's consider a naive implementation of the buffer where written messages are appended, starting from the beginning of the buffer.
   1. After writing messages *a*, *b* ,*c* in a buffer of size 4, the buffer would look like `[abc_]` where `_` indicates an empty position.
   1. After reading the first message (*a*), we get `[bc__]`.
   1. After writing a message *d* (appended at the end of the buffer), we get `[bcd_]`.

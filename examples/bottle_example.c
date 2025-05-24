@@ -34,8 +34,7 @@ stop (void *arg)
   sleep (2);
   BOTTLE (Point) * bottle = arg;
   BOTTLE_PLUG (bottle);
-  if (BOTTLE_IS_PLUGGED (bottle))
-    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p PLUGGED.\n", pthread_self (), (void *) bottle);
+  fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p PLUGGED.\n", pthread_self (), (void *) bottle);
   return 0;
 }
 
@@ -46,8 +45,7 @@ restart (void *arg)
   sleep (5);
   BOTTLE (Point) * bottle = arg;
   BOTTLE_UNPLUG (bottle);
-  if (!BOTTLE_IS_PLUGGED (bottle))
-    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p UNPLUGGED.\n", pthread_self (), (void *) bottle);
+  fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p UNPLUGGED.\n", pthread_self (), (void *) bottle);
   return 0;
 }
 
@@ -116,7 +114,7 @@ eat (void *arg)
     fprintf (stderr, "Eater thread %1$#lx: ? <- bottle %2$p...\n", pthread_self (), (void *) bottle);
     Point p;
     errno = 0;
-    if (BOTTLE_DRAIN (bottle, p))       // message p <- bottle
+    if (BOTTLE_DRAIN (bottle, &p))       // message p <- bottle
     {
       fprintf (stderr, "Eater thread %1$#lx: { (%3$g, %4$g), \"%5$s\" } <- bottle %2$p.\n",
                pthread_self (), (void *) bottle, p.x, p.y, p.s);
@@ -144,85 +142,88 @@ eat (void *arg)
 int
 main (void)
 {
-  BOTTLE (Point) * bottle = BOTTLE_CREATE (Point, 3);
-  BOTTLE_ASSERT (bottle);
-  switch (BOTTLE_CAPACITY (bottle))
+  size_t test[] = { UNBUFFERED, 3, UNLIMITED };
+  for (size_t t = 0 ; t < sizeof (test) / sizeof (*test) ; t++)
   {
-    case UNBUFFERED:
-      fprintf (stderr, "Bottle %1$p created (unbuffered).\n", (void *) bottle);
-      break;
-    case UNLIMITED:
-      fprintf (stderr, "Bottle %1$p created (effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
-      break;
-    case DEFAULT:
-    default:
-      fprintf (stderr, "Bottle %1$p created (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
-      break;
+    fprintf (stderr, "*** TEST %lu ***\n", t + 1);
+    BOTTLE (Point) * bottle = BOTTLE_CREATE (Point, test[t]);
+    BOTTLE_ASSERT (bottle);
+    switch (BOTTLE_CAPACITY (bottle))
+    {
+      case UNBUFFERED:
+        fprintf (stderr, "Bottle %1$p created (unbuffered).\n", (void *) bottle);
+        break;
+      case UNLIMITED:
+        fprintf (stderr, "Bottle %1$p created (unbound, effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
+        break;
+      default:
+        fprintf (stderr, "Bottle %1$p created (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
+        break;
+    }
+
+    pthread_t eater[3];           // 3 eater threads
+    for (unsigned int i = 0; i < sizeof (eater) / sizeof (*eater); i++)
+      if (!pthread_create (&eater[i], 0, eat, bottle))    // Pass the bottle as an argument of the eater.
+        fprintf (stderr, "Eater thread %#lx started.\n", eater[i]);
+
+    pthread_t feeder;
+    if (!pthread_create (&feeder, 0, feed, bottle))       // Pass the bottle as an argument of the feeder.
+      fprintf (stderr, "Feeder thread %#lx started.\n", feeder);
+
+    pthread_t stopper;
+    if (!pthread_create (&stopper, 0, stop, bottle))      // Pass the bottle as an argument.
+      fprintf (stderr, "Stopper thread %#lx started.\n", stopper);
+
+    pthread_t starter;
+    if (!pthread_create (&starter, 0, restart, bottle))   // Pass the bottle as an argument.
+      fprintf (stderr, "Starter thread %#lx started.\n", starter);
+
+    pthread_t closer;
+    if (!pthread_create (&closer, 0, close_bottle, bottle))       // Pass the bottle as an argument.
+      fprintf (stderr, "Closer thread %#lx started.\n", closer);
+
+    // Wait for all messages to be fed through the bottle.
+    pthread_join (feeder, 0);
+
+    // From here, the feeder is done, the bottle won't be filled any more.
+
+    // Therefore, we can close the bottle:
+    // 1. prevents any new message from being sent in the bottle.
+    // 2. waits for the bottle to be emptied by the eaters.
+    // 3. asks for any blocked receivers to stop waiting for food and to finish their job.
+    fprintf (stderr, "Bottle %p closing...\n", (void *) bottle);
+    BOTTLE_CLOSE (bottle);
+    fprintf (stderr, "Bottle %p closed.\n", (void *) bottle);
+
+    // From here, the bottle has been emptied.
+
+    // Wait for all the receivers to finish their job.
+    for (unsigned int i = 0; i < sizeof (eater) / sizeof (*eater); i++)
+      pthread_join (eater[i], 0);
+
+    // From here, all eaters are done, and there are not anymore users of the bottle:
+    // the bottle can be destroyed safely
+
+    fprintf (stderr, "Bottle %p dispose...\n", (void *) bottle);
+    //BOTTLE_WAIT_UNTIL_EMPTY (bottle);
+    fprintf (stderr, "Bottle %p disposed.\n", (void *) bottle);
+
+    pthread_join (starter, 0);
+    pthread_join (stopper, 0);
+    pthread_join (closer, 0);
+    switch (BOTTLE_CAPACITY (bottle))
+    {
+      case UNBUFFERED:
+        fprintf (stderr, "Bottle %1$p destroyed (unbuffered).\n", (void *) bottle);
+        break;
+      case UNLIMITED:
+        fprintf (stderr, "Bottle %1$p destroyed (unbound, effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
+        break;
+      default:
+        fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
+        break;
+    }
+    BOTTLE_DESTROY (bottle);
+    fprintf (stderr, "Finished.\n\n");
   }
-
-  pthread_t eater[3];           // 3 eater threads
-  for (unsigned int i = 0; i < sizeof (eater) / sizeof (*eater); i++)
-    if (!pthread_create (&eater[i], 0, eat, bottle))    // Pass the bottle as an argument of the eater.
-      fprintf (stderr, "Eater thread %#lx started.\n", eater[i]);
-
-  pthread_t feeder;
-  if (!pthread_create (&feeder, 0, feed, bottle))       // Pass the bottle as an argument of the feeder.
-    fprintf (stderr, "Feeder thread %#lx started.\n", feeder);
-
-  pthread_t stopper;
-  if (!pthread_create (&stopper, 0, stop, bottle))      // Pass the bottle as an argument.
-    fprintf (stderr, "Stopper thread %#lx started.\n", stopper);
-
-  pthread_t starter;
-  if (!pthread_create (&starter, 0, restart, bottle))   // Pass the bottle as an argument.
-    fprintf (stderr, "Starter thread %#lx started.\n", starter);
-
-  pthread_t closer;
-  if (!pthread_create (&closer, 0, close_bottle, bottle))       // Pass the bottle as an argument.
-    fprintf (stderr, "Closer thread %#lx started.\n", closer);
-
-  // Wait for all messages to be fed through the bottle.
-  pthread_join (feeder, 0);
-
-  // From here, the feeder is done, the bottle won't be filled any more.
-
-  // Therefore, we can close the bottle:
-  // 1. prevents any new message from being sent in the bottle.
-  // 2. waits for the bottle to be emptied by the eaters.
-  // 3. asks for any blocked receivers to stop waiting for food and to finish their job.
-  fprintf (stderr, "Bottle %p closing...\n", (void *) bottle);
-  BOTTLE_CLOSE (bottle);
-  fprintf (stderr, "Bottle %p closed.\n", (void *) bottle);
-
-  // From here, the bottle has been emptied.
-
-  // Wait for all the receivers to finish their job.
-  for (unsigned int i = 0; i < sizeof (eater) / sizeof (*eater); i++)
-    pthread_join (eater[i], 0);
-
-  // From here, all eaters are done, and there are not anymore users of the bottle:
-  // the bottle can be destroyed safely
-
-  fprintf (stderr, "Bottle %p dispose...\n", (void *) bottle);
-  //BOTTLE_WAIT_UNTIL_EMPTY (bottle);
-  fprintf (stderr, "Bottle %p disposed.\n", (void *) bottle);
-
-  pthread_join (starter, 0);
-  pthread_join (stopper, 0);
-  pthread_join (closer, 0);
-  switch (BOTTLE_CAPACITY (bottle))
-  {
-    case UNBUFFERED:
-      fprintf (stderr, "Bottle %1$p destroyed (unbuffered).\n", (void *) bottle);
-      break;
-    case UNLIMITED:
-      fprintf (stderr, "Bottle %1$p destroyed (effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
-      break;
-    case DEFAULT:
-    default:
-      fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
-      break;
-  }
-  BOTTLE_DESTROY (bottle);
-  fprintf (stderr, "Finished.\n");
 }
