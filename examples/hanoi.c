@@ -1,163 +1,82 @@
-#include <stdlib.h>
-#include <errno.h>
 #include <stdio.h>
 #include <locale.h>
-#include <unistd.h>
-#ifndef TRACE
-#  define NDEBUG
-#endif
-#include <assert.h>
 #include <pthread.h>
 
-enum tower
-{
-  A = 'A',
-  B = 'B',
-  C = 'C',
-};
-
-#ifdef TRACE
-#  include "bottle_impl.h"
+#include "bottle_impl.h"
 typedef struct move
 {
-  unsigned long ring;
-  enum tower from, to;
+  char from, to;
 } Move;
-
 bottle_type_declare (Move);
 bottle_type_define (Move);
 
-typedef struct
+struct thread_args
 {
-  enum tower name;
-  unsigned long hight;
-  unsigned long *rings;
-} Stack;
-
-static Stack stacks[3] = {
-  {.name = A,.hight = 0,.rings = 0,},
-  {.name = B,.hight = 0,.rings = 0,},
-  {.name = C,.hight = 0,.rings = 0,},
+  size_t nb_rings;
+  char from, to;
+  bottle_t (Move) *moves_queue;
 };
 
-static Stack *
-stack_get_from_name (enum tower name)
+static void *
+repeat_moves (void *arg)
 {
-  for (size_t i = 0; i < sizeof (stacks) / sizeof (*stacks); i++)
-  {
-    if (name == stacks[i].name)
-      return &stacks[i];
-  }
-  errno = EINVAL;
-  return 0;
+  size_t nb_rings = (*(struct thread_args *) arg).nb_rings;
+  char from = (*(struct thread_args *) arg).from;
+  char to = (*(struct thread_args *) arg).to;
+  char *rings = malloc (nb_rings * sizeof (*rings));
+  for (size_t ring = 0; ring < nb_rings; ring++)
+    rings[ring] = from;
+  fprintf (stderr, "%c :< ", from);
+  for (size_t i = 0; i < nb_rings; i++)
+    fprintf (stderr, "%zu ", i + 1);
+  fprintf (stderr, "|\n");
+  bottle_t (Move) *moves_queue = (*(struct thread_args *) arg).moves_queue;
+
+  size_t nb_moves = 0;
+  Move m;
+  while (bottle_recv (moves_queue, &m))
+    for (size_t ring = 0; ring < nb_rings; ring++)
+      if (rings[ring] == m.from)
+      {
+        rings[ring] = m.to;
+        fprintf (stderr, "After a move of ring %zu from %c to %c:\n", ring + 1, m.from, m.to);
+        nb_moves++;
+        fprintf (stderr, "%c :< ", m.from);
+        for (size_t i = 0; i < nb_rings; i++)
+          if (rings[i] == m.from)
+            fprintf (stderr, "%zu ", i + 1);
+        fprintf (stderr, "|\n");
+        fprintf (stderr, "%c :< ", m.to);
+        for (size_t i = 0; i < nb_rings; i++)
+          if (rings[i] == m.to)
+            fprintf (stderr, "%zu ", i + 1);
+        fprintf (stderr, "|\n");
+        break;
+      }
+
+  unsigned long *ret = malloc (sizeof (*ret));
+  *ret = nb_moves;
+  for (size_t i = 0; i < nb_rings; i++)
+    if (rings[i] != to)
+      *ret = 0;
+  free (rings);
+  return ret;
 }
 
 static unsigned long
-stack_add (enum tower name, unsigned long ring)
-{
-  Stack *stack = stack_get_from_name (name);
-  if (!stack)
-    return 0;
-  stack->hight++;
-  stack->rings = realloc (stack->rings, sizeof (*stack->rings) * stack->hight);
-  stack->rings[stack->hight - 1] = ring;
-  return stack->hight;
-}
-
-static unsigned long
-stack_remove (enum tower name)
-{
-  Stack *stack = stack_get_from_name (name);
-  if (!stack || !stack->hight)
-    return 0;
-  stack->hight--;
-  stack->rings = realloc (stack->rings, sizeof (*stack->rings) * stack->hight);
-  if (!stack->hight)
-    stack->rings = 0;
-  return stack->hight;
-}
-
-static void
-stack_print (enum tower name)
-{
-  Stack *stack = stack_get_from_name (name);
-  if (!stack)
-    return;
-  fprintf (stderr, "%c:", (char) stack->name);
-  if (stack->hight)
-    for (unsigned long i = 0; i < stack->hight; i++)
-      fprintf (stderr, " %lu", stack->rings[i]);
-  fprintf (stderr, "\n");
-}
-
-static void
-move_ring (unsigned long ring, enum tower from, enum tower to)
-{
-  stack_remove (from);
-  stack_add (to, ring);
-  for (size_t i = 0 ; i < sizeof (stacks) / sizeof (*stacks) ; i++)
-    stack_print (stacks[i].name);
-}
-#endif
-
-static unsigned long
-move_rings (unsigned long upper_rings, enum tower from, enum tower to, enum tower intermediate
-#ifdef TRACE
-            , bottle_t (Move) * b
-#endif
-  )
+move_rings (size_t upper_rings, char from, char to, char intermediate, bottle_t (Move) *b)
 {
   if (upper_rings == 0)
     return 0;
 
-  unsigned long nb_moves = move_rings (upper_rings - 1, from, intermediate, to
-#ifdef TRACE
-                                       , b
-#endif
-    );
+  unsigned long nb_moves = move_rings (upper_rings - 1, from, intermediate, to, b);
 
   nb_moves++;
-#ifdef TRACE
-  Move m = {.ring = upper_rings,.from = from,.to = to };
+  printf ("Ask for moving ring %zu from %c to %c.\n", upper_rings, from, to);
+  Move m = {.from = from,.to = to };
   bottle_send (b, m);
-#else
-  fprintf (stderr, "Move ring %lu from %c to %c.\n", upper_rings, from, to);
-#endif
 
-  return nb_moves += move_rings (upper_rings - 1, intermediate, to, from
-#ifdef TRACE
-                                 , b
-#endif
-    );
-}
-
-struct thread_args
-{
-  unsigned long nb_rings;
-#ifdef TRACE
-    bottle_t (Move) * moves;
-#endif
-};
-
-static void *
-solve (void *arg)
-{
-  unsigned long nb_rings = (*(struct thread_args *) arg).nb_rings;
-#ifdef TRACE
-  bottle_t (Move) * b = (*(struct thread_args *) arg).moves;
-#endif
-  assert (A != B && B != C && C != A);
-  unsigned long nb_moves = move_rings (nb_rings, A, C, B
-#ifdef TRACE
-                                       , b
-#endif
-    );
-#ifdef TRACE
-  bottle_close (b);
-#endif
-  unsigned long *ret = malloc (sizeof (*ret));
-  *ret = nb_moves;
-  return ret;
+  return nb_moves += move_rings (upper_rings - 1, intermediate, to, from, b);
 }
 
 int
@@ -165,34 +84,34 @@ main (int argc, char **argv)
 {
   setlocale (LC_ALL, "");
 
-  pthread_t solver;
-  unsigned long nb_rings = argc > 1 ? strtoul (argv[1], 0, 0) : 8;
-  struct thread_args solver_args = {.nb_rings = nb_rings };
-#ifdef TRACE
-  for (unsigned long ring = nb_rings; ring > 0; ring--)
-    stack_add (A, ring);
-  solver_args.moves = bottle_create (Move, UNLIMITED);  // The queue has infinite size.
-#endif
-  pthread_create (&solver, 0, solve, &solver_args);
+  size_t nb_rings = argc > 1 ? strtoul (argv[1], 0, 0) : 8;
+  if (!nb_rings)
+    return EXIT_FAILURE;
 
-#ifdef TRACE
-  Move m;
-  while (bottle_recv (solver_args.moves, &m))
-  {
-    fprintf (stderr, "Move ring %lu from %c to %c.\n", m.ring, (char) m.from, (char) m.to);
-    move_ring (m.ring, m.from, m.to);
-  }
-#endif
+  bottle_t (Move) *moves_queue = bottle_create (Move, UNLIMITED);      // The queue has infinite size.
 
+  pthread_t displayer;
+  struct thread_args args = {.nb_rings = nb_rings,.moves_queue = moves_queue,.from = 'A',.to = 'C' };
+  pthread_create (&displayer, 0, repeat_moves, &args);
+
+  unsigned long nb_moves = move_rings (nb_rings, 'A', 'C', 'B', moves_queue);
+  printf ("SOLVED. Moving %lu rings from %c to %c requires %lu moves.\n", nb_rings, 'A', 'C', nb_moves);
+
+  bottle_close (moves_queue);
   void *ret;
-  pthread_join (solver, &ret);
-  unsigned long nb_moves = *(unsigned long*)ret;
-  printf ("Moving %lu rings from %c to %c requires %lu moves.\n", nb_rings, A, C, nb_moves);
-  printf ("%s.\n", (nb_moves + 1 == 1UL << nb_rings) ? "OK" : "NOK");
-  free (ret);
-#ifdef TRACE
-  bottle_destroy (solver_args.moves);
-  while (stack_remove (C))
-     /**/;
-#endif
+  pthread_join (displayer, &ret);
+  bottle_destroy (moves_queue);
+
+  if (ret && nb_moves == *(unsigned long *) ret && (nb_moves + 1 == 1UL << nb_rings))
+  {
+    printf ("OK.\n");
+    free (ret);
+    return EXIT_SUCCESS;
+  }
+  else
+  {
+    printf ("NOK.\n");
+    free (ret);
+    return EXIT_FAILURE;
+  }
 }

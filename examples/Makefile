@@ -18,5 +18,3 @@ run: build
 	./bottle_example
 	./hanoi
 	./bottle_perf
-
-hanoi: CFLAGS+=-DTRACE
