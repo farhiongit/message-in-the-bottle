@@ -176,8 +176,8 @@ For instance, to exchange message texts between threads, start code with:
 ```c
 #include "bottle_impl.h"
 typedef const char * TextMessage;   // A user-defined type of messages.
-bottle_type_declare (TextMessage);       // Declares the usage of bottles for the user-defined type.
-bottle_type_define (TextMessage);        // Defines the usage of bottles for the user-defined type.
+bottle_type_declare (TextMessage);  // Declares the usage of bottles for the user-defined type.
+bottle_type_define (TextMessage);   // Defines the usage of bottles for the user-defined type.
 ```
 
 The user interface is available in two styles, a macro-like and a C-like style.
@@ -216,16 +216,16 @@ The following text uses the recommended C-like style but the equivalent macro-li
 
 ### Source files
 
-    - [`bottle.h`](bottle.h) defines the user interface documented here.
-    - [`bottle_impl.h`](bottle_impl.h) implements the user programming interface.
-    - [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h). It permits usage of optional parameters in function signatures.
-      Functions `bottle_create`, `bottle_auto`, `bottle_recv`, `bottle_send`, `bottle_try_recv`, `bottle__try_send` accept an optional argument, that be be *omitted*.
-      This is brought by the use of the tricky macro VFUNC defined in `vfunc.h` (see http://stackoverflow.com/questions/11761703/overloading-macro-on-number-of-arguments).
+  - [`bottle.h`](bottle.h) defines the user interface documented here.
+  - [`bottle_impl.h`](bottle_impl.h) implements the user programming interface.
+  - [`vfunc.h`](vfunc.h) is used by [`bottle.h`](bottle.h). It permits usage of optional parameters in function signatures.
+    Functions `bottle_create`, `bottle_auto`, `bottle_recv`, `bottle_send`, `bottle_try_recv`, `bottle__try_send` accept an optional argument, that be be *omitted*.
+    This is brought by the use of the tricky macro VFUNC defined in `vfunc.h` (see http://stackoverflow.com/questions/11761703/overloading-macro-on-number-of-arguments).
 
 In case a library interface would expose a bottle,
 
-    - [`bottle.h`](bottle.h) should be included in the header of the library ;
-    - [`bottle_impl.h`](bottle_impl.h) should be included in the implementation of the library.
+  - [`bottle.h`](bottle.h) should be included in the header of the library ;
+  - [`bottle_impl.h`](bottle_impl.h) should be included in the implementation of the library.
 
 ## About thread communication through messages
 
@@ -326,14 +326,17 @@ This design is inspired by the [LMAX Disruptor pattern](https://lmax-exchange.gi
 
 ## Description of the user interface
 
+Hereafter, *T* is a type, either standard or user defined.
+
 ### Declaration (allocation) of bottles
 
  Bottles can be created either dynamically or with an automatically allocation.
 
 #### Creation of a bottle, dynamically
 
-> bottle_t (*T*) \* **bottle_create** (*T*, [size_t capacity = DEFAULT])
->
+```c
+bottle_t (T) *bottle_create (T, [size_t capacity = DEFAULT])
+```
 > *The second argument is optional and defaults to `DEFAULT` (see **Buffered message queue** above).*
 
 To transport messages of type *T*, `bottle_create` creates a pointer to a dynamically allocated message queue (usually on the sender side).
@@ -347,13 +350,13 @@ For instance, to create a pointer to a message queue *b* for exchanging integers
 The message queue is **a strongly typed** (it is a hand-made template container) FIFO queue.
 
 To create a pointer to a **buffered** message queue, pass its *capacity* as an optional (positive integer
-or `UNLIMITED`) second argument of `bottle_create` :
-
-`bottle_t(` *T* `) *`*bottle* ` = bottle_create (` *T* `, ` *capacity* `);`
+or `UNLIMITED`) second argument of `bottle_create`.
 
 ##### Destruction of a bottle dynamically allocated
 
-> void **bottle_destroy** (bottle_t (*T*) \*bottle)
+```c
+void bottle_destroy (bottle_t (T) *bottle)
+```
 
 Thereafter, once *all the receivers are done* (see **Closing communication** below) in the user program,
 and the bottle is not needed anymore, it can be destroyed safely with `bottle_destroy`.
@@ -363,8 +366,10 @@ and the bottle is not needed anymore, it can be destroyed safely with `bottle_de
 Rather than creating pointers to bottles, local variables of type bottle_t (*T*) can as well be declared and initialised with `bottle_auto` (usually on the sender side).
 These variables behave like automatic variables: resources are automatically allocated at declaration and deallocated at end of scope.
 
-> **bottle_auto** (*variable name*, *T*, [size_t capacity = DEFAULT])
->
+```c
+bottle_auto (variable_name, T, [size_t capacity = DEFAULT])
+```
+
 > `bottle_auto` can only be applied to auto function scope variables; it may not be applied to parameters
 > or variables with static storage duration.
 
@@ -404,8 +409,9 @@ the bottle has a mouth where it can be filled with messages and a tap from where
 
 #### Receiving messages
 
-> int **bottle_recv** (bottle_t (*T*) \*bottle, [*T* *message])
->
+```c
+int bottle_recv (bottle_t (T) *bottle, [T *message])
+```
 > *The second argument `message` is an optional variable name. If omitted, the bottle is drained but the message is not fetched and is lost.*
 
 The receivers can receive messages (draining form the tap), as long as the bottle is not empty and not closed, by calling `bottle_recv`.
@@ -429,8 +435,9 @@ Therefore `bottle_recv` returns 1 if a message has been successfully received fr
 
 #### Sending messages
 
-> int **bottle_send** (bottle_t (*T*) \*bottle, [*T* message])
->
+```c
+int bottle_send (bottle_t (T) *bottle, [T message])
+```
 > *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used to fill the bottle.*
 
 The senders can send messages (filling in through the mouth of the bottle)
@@ -492,7 +499,9 @@ the user program must respect those simple rules:
 
 ### Closing communication
 
-> void **bottle_close** (bottle_t (*T*) \*bottle)
+```c
+void bottle_close (bottle_t (T) *bottle)
+```
 
 When concurrent threads are synchronised by an exchange of messages, the senders must inform the receivers
 when they have finished sending messages, so that receivers won't need to wait for extra messages (see `bottle_recv` above).
@@ -514,12 +523,12 @@ The call to `bottle_close`, *on the sender side*:
 
 `bottle_close` acts as if it were sending an end-of-file in the bottle.
 
-> Once closed, a bottle can't be reopen.
-> Therefore, the call to `bottle_close` *must be done*
-> after the senders have finished their work (either at the end
-> or sequentially just after the sender treatment).
-
 Notes:
+
+- Once closed, a bottle can't be reopen.
+  Therefore, the call to `bottle_close` *must be done*
+  after the senders have finished their work (either at the end
+  or sequentially just after the sender treatment).
 
 - After the call to `bottle_close` by the sender, receivers are still able to (and *should*) process the remaining messages in the bottle to avoid any memory leak due to unprocessed remaining messages.
 
@@ -536,24 +545,26 @@ and `bottle_destroy`.
 
 ### Other features
 
-#### Unblocking message queue functions
+#### Non-blocking message queue functions
 
-> int **bottle_try_recv** (bottle_t (*T*) \*bottle, [*T* *message])
->
+```c
+int bottle_try_recv (bottle_t (T) *bottle, [T *message])
+```
 > *The second argument is optional. If omitted, the bottle is drained but the message is lost.*
 
-> int **bottle_try_send** (bottle_t (*T*) \*bottle, [*T* message])
->
+```c
+int bottle_try_send (bottle_t (T) *bottle, [T message])
+```
 > *The second argument is optional. If omitted, an arbitrary unspecified dummy message is used.*
 
-These are unblocking versions of the filling and draining functions.
+These are non-blocking versions of the filling and draining functions.
 
 These functions return immediately without blocking. *They are **not** suited for thread synchronisation* and are of limited use.
 
 When used, the message queue looses its thread-synchronisation feature and
 behaves like a simple thread-safe FIFO message queue:
 
-- Receivers can receive messages without blocking with `bottle_try_recv (`*bottle*`, *`*message*`)`.
+- Receivers can receive messages without blocking with `bottle_try_recv`.
 
     - `bottle_try_recv` returns 0 (with `errno` set to `ENOTSUP`) if the bottle capacity is `UNBUFFERED`.
     - `bottle_try_recv` returns 0 (with `errno` set to `ECONNABORTED`) if the bottle is empty and closed.
@@ -561,7 +572,7 @@ behaves like a simple thread-safe FIFO message queue:
     - Otherwise, it receives a *message* (it modifies the value of the second argument *message*)
       from the bottle and returns 1.
 
-- Senders can send messages without blocking with `bottle_try_send (`*bottle*`, `*message*`)`.
+- Senders can send messages without blocking with `bottle_try_send`.
 
     - `bottle_try_send` returns 0 (with `errno` set to `ENOTSUP`) if the bottle capacity is `UNBUFFERED`.
     - `bottle_try_send` returns 0 if the bottle is closed (with `errno` set `ECONNABORTED`).
@@ -573,9 +584,10 @@ behaves like a simple thread-safe FIFO message queue:
 
 #### Halting communication
 
-> void **bottle_plug** (bottle_t (*T*) \*bottle)
-
-> void **bottle_unplug** (bottle_t (*T*) \*bottle)
+```c
+void bottle_plug (bottle_t (T) *bottle)
+void bottle_unplug (bottle_t (T) *bottle)
+```
 
 The communication between sender and receiver threads can be stopped and restarted at will if needed.
 This could be used by the receiver or a third thread to control the sender.
@@ -592,9 +604,11 @@ Note that the tap of the bottle remains open in order to keep receiving previous
 
 #### Getting the capacity of a bottle
 
-> size_t **bottle_capacity** (bottle_t (*T*) \*bottle)
+```c
+size_t bottle_capacity (bottle_t (T) *bottle)
+```
 
-`bottle_capacity` returns the capacity of the bottle (as defined at creation with `bottle_create`):
+`bottle_capacity` returns the capacity of the bottle (as defined at creation with `bottle_create` or `bottle_auto`):
 
  - A value equal to `DEFAULT` or `UNBUFFERED` indicates an unbuffered bottle.
  - A positive number indicate a buffered bottle of limited capacity.
@@ -610,7 +624,7 @@ In this case, a bottle is simply used as a synchronisation method or a token cou
 ## Examples
 
 All [examples](examples) should be compiled with the option `-pthread`.
-See [examples](examples/Makefile) for details.
+See [Makefile](examples/Makefile) for details.
 
 ### Unbuffered bottle
 
@@ -644,14 +658,16 @@ Note:
 
 #### FIFO
 
-[`hanoi.c`](examples/hanoi.c) demonstrates that the order of the received messages is the exact order of the messages sent in the bottle:
-    - the main thread (`main`) solves the Towers of Hanoï (recursively), determining the sequence of moves,
-      and transmitting theses moves to another thread through an unlimited bottle (it could nevertheless be unbuffered or of limited size with the same result).
-    - another thread mimics blindly the moves as told by the main thread, in the exact same order to achieve the same result.
+[`hanoi.c`](examples/hanoi.c) demonstrates that the order of the received messages is the very same as the order of the messages sent in the bottle:
+
+  - the main thread (`main`) solves the Towers of Hanoï (recursively), determining the sequence of moves,
+    and transmitting theses moves to another thread through an unlimited bottle (it could nevertheless be unbuffered or of limited size with the same result).
+  - another thread mimics blindly the moves as told by the main thread, in the exact same order to achieve the same result.
 
 ## Under the hood (internals)
 
 Each instance of a bottle :
+
   - contains a FIFO queue `queue` (see below.)
   - two states `closed` and `frozen` indicating a bottle was closed or plugged respectively.
 
