@@ -34,14 +34,11 @@ repeat_moves (void *arg)
   char from = (*(struct thread_args *) arg).from;
   char to = (*(struct thread_args *) arg).to;
   unsigned long *ret = malloc (sizeof (*ret));
-  *ret = (unsigned long) 0;
-  if (!nb_rings)
-    return ret;
-
   *ret = (unsigned long) -1;
   char *rings = malloc (nb_rings * sizeof (*rings));  // Array of rings, from the smallest to the largest.
   for (size_t ring = 0; ring < nb_rings; ring++)
     rings[ring] = from;
+  fprintf (stderr, "Starting with:\n");
   print_peg (nb_rings, rings, from);
   bottle_t (Move) *moves_queue = (*(struct thread_args *) arg).moves_queue;
 
@@ -58,9 +55,12 @@ repeat_moves (void *arg)
         print_peg (nb_rings, rings, m.to);
         break;
       }
-    else if (rings[ring] == m.to)
-      return ret;  // Forbidden move.
+      else if (rings[ring] == m.to)
+        return ret;  // Forbidden move.
 
+  fprintf (stderr, "Ending with:\n");
+  print_peg (nb_rings, rings, to);
+  fprintf (stderr, "after %zu moves.\n", nb_moves);
   *ret = nb_moves;
   for (size_t i = 0; i < nb_rings; i++)
     if (rings[i] != to)
