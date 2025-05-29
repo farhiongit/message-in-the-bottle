@@ -209,7 +209,6 @@ Both styles are strictly equivalent, can be mixed and switched.
 ||Plug                  | `BOTTLE_PLUG`                       | `bottle_plug`
 ||Unplug                | `BOTTLE_UNPLUG`                     | `bottle_unplug`
 |**Properties**         |
-||Is closed             | `BOTTLE_IS_CLOSED`                  | `bottle_is_closed`
 ||Get buffer capacity   | `BOTTLE_CAPACITY`                   | `bottle_capacity`
 
 The following text uses the recommended C-like style but the equivalent macro-like style can be used as well.
@@ -530,7 +529,7 @@ Notes:
   after the senders have finished their work (either at the end
   or sequentially just after the sender treatment).
 
-- `bottle_close` can be called several times without arm and without effect.
+- `bottle_close` can be called several times without any arm and without any effect.
 
 - After the call to `bottle_close` by the sender, receivers are still able to (and *should*) process the remaining messages in the bottle to avoid any memory leak due to unprocessed remaining messages.
 

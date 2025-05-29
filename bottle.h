@@ -137,9 +137,6 @@
 #define BOTTLE_CLOSE(self)  \
   do { (self)->vtable->Close ((self)); } while (0)
 
-/// int BOTTLE_IS_CLOSED (BOTTLE (T) *bottle)
-#define BOTTLE_IS_CLOSED(self) ((self)->closed)
-
 /// void BOTTLE_DESTROY (BOTTLE (T) *bottle)
 #define BOTTLE_DESTROY(self)  \
   do { (self)->vtable->Destroy ((self)); } while (0)
