@@ -60,7 +60,7 @@ repeat_moves (void *arg)
 
   fprintf (stderr, "Ending with:\n");
   print_peg (nb_rings, rings, to);
-  fprintf (stderr, "after %zu moves.\n", nb_moves);
+  fprintf (stderr, "after %lu moves.\n", nb_moves);
   *ret = nb_moves;
   for (size_t i = 0; i < nb_rings; i++)
     if (rings[i] != to)

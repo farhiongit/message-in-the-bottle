@@ -530,6 +530,8 @@ Notes:
   after the senders have finished their work (either at the end
   or sequentially just after the sender treatment).
 
+- `bottle_close` can be called several times without arm and without effect.
+
 - After the call to `bottle_close` by the sender, receivers are still able to (and *should*) process the remaining messages in the bottle to avoid any memory leak due to unprocessed remaining messages.
 
 - The user program *must* wait for all the receiver treatments to finish
@@ -601,6 +603,8 @@ When plugged, sent messages are block even though the bottle is not full and the
 Messages are unblocked as soon as the bottle is unplugged.
 
 Note that the tap of the bottle remains open in order to keep receiving previously sent messages.
+
+`bottle_plug` and `bottle_unplug` can be called several times in a row without arm and without effect.
 
 #### Getting the capacity of a bottle
 
