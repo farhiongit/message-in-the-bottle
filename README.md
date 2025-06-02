@@ -110,6 +110,8 @@ while (bottle_recv (bottle, &msg))
 }
 ```
 
+The while loop will not end before the bottle is closed with `bottle_close`.
+
 ### 7. Destroy the bottle on the sender side after all messages have been received by the receiver threads
 
 On the sender side, usually the main thread, create a bottle:
@@ -125,7 +127,7 @@ bottle_destroy (bottle);
     `pthread_join` could be used to wait for sender and receiver threads to finish.
   - If there are several senders, each sender should stop sending messages if `bottle_send` or `bottle_try_send` return `0` with `errno` set to `ECONNABORTED`.
   - The bottle could as well be closed (`bottle_close`) by a receiver (there can be several) to ask the senders (there can be several) to stop sending messages.
-    Senders should then then stop sending messages if `bottle_send` or `bottle_try_send` return `0` with `errno` set to `ECONNABORTED`.
+    Senders should then stop sending messages if `bottle_send` or `bottle_try_send` return `0` with `errno` set to `ECONNABORTED`.
   - In a never ending process (such as a service or the back-end side of an application), `bottle_close` and `bottle_destroy` may not be called.
 
 ### Example
@@ -558,6 +560,9 @@ Notes:
 - The user program *must* wait for all the receiver treatments to finish
   (usually, waiting for the receivers to finish with a `pthread_join` on the sender side might suffice)
   before destroying the bottle (with `bottle_destroy`).
+
+- The bottle could as well be closed (`bottle_close`) by a receiver (there can be several) to ask the senders (there can be several) to stop sending messages.
+  Senders should then stop sending messages if `bottle_send` or `bottle_try_send` return `0` with `errno` set to `ECONNABORTED`.
 
 - As said above, `bottle_close` is *only useful when the bottle is used to synchronise concurrent
 threads* on sender and receiver sides and need not be used in other cases (thread-safe shared FIFO queue).
