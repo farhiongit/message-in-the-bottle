@@ -20,26 +20,27 @@ int main (void)
 {
   BOTTLE (int) * fifo;
 
-  fifo = BOTTLE_CREATE (int, 10);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  const size_t BOTTLE_CAPACITY = 10;
+  fifo = BOTTLE_CREATE (int, BOTTLE_CAPACITY);
+  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   write (fifo);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   read (fifo);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   BOTTLE_CLOSE (fifo);
   BOTTLE_DESTROY (fifo);
   printf ("\n");
   fifo = BOTTLE_CREATE (int, UNLIMITED);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   write (fifo);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   read (fifo);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY (fifo));
+  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   BOTTLE_CLOSE (fifo);
   BOTTLE_DESTROY (fifo);

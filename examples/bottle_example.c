@@ -148,7 +148,7 @@ main (void)
     fprintf (stderr, "*** TEST %lu ***\n", t + 1);
     BOTTLE (Point) * bottle = BOTTLE_CREATE (Point, test[t]);
     BOTTLE_ASSERT (bottle);
-    switch (BOTTLE_CAPACITY (bottle))
+    switch (test[t])
     {
       case UNBUFFERED:
         fprintf (stderr, "Bottle %1$p created (unbuffered).\n", (void *) bottle);
@@ -157,7 +157,7 @@ main (void)
         fprintf (stderr, "Bottle %1$p created (unbound, effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
         break;
       default:
-        fprintf (stderr, "Bottle %1$p created (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
+        fprintf (stderr, "Bottle %1$p created (capacity %2$zu).\n", (void *) bottle, test[t]);
         break;
     }
 
@@ -211,7 +211,7 @@ main (void)
     pthread_join (starter, 0);
     pthread_join (stopper, 0);
     pthread_join (closer, 0);
-    switch (BOTTLE_CAPACITY (bottle))
+    switch (test[t])
     {
       case UNBUFFERED:
         fprintf (stderr, "Bottle %1$p destroyed (unbuffered).\n", (void *) bottle);
@@ -220,7 +220,7 @@ main (void)
         fprintf (stderr, "Bottle %1$p destroyed (unbound, effective capacity %2$zu).\n", (void *) bottle, QUEUE_CAPACITY (bottle->queue));
         break;
       default:
-        fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, BOTTLE_CAPACITY (bottle));
+        fprintf (stderr, "Bottle %1$p destroyed (capacity %2$zu).\n", (void *) bottle, test[t]);
         break;
     }
     BOTTLE_DESTROY (bottle);

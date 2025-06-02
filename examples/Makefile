@@ -1,4 +1,5 @@
 CFLAGS+=-I.. -Wall
+#CFLAGS+=-DLIMITED_BUFFER
 #CFLAGS+=-O
 #CFLAGS+=-g
 LDFLAGS=-pthread

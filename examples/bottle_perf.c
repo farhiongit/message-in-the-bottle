@@ -27,7 +27,7 @@ test1 (void)
     clock_t start = clock ();
     nb_p = nb_c = 0;
     bottle_t (int) * bottle = bottle_create (int, test[t]);
-    printf ("Declared capacity: %zu\n", BOTTLE_CAPACITY(bottle));
+    printf ("Declared capacity: %zu\n", test[t]);
     pthread_t eater;
     pthread_create (&eater, 0, eat, bottle);
 
@@ -66,7 +66,7 @@ test2 (void)
   {
     printf ("*** TEST %lu ***\n", ++test_number);
     bottle_t (int) * bottle = bottle_create (int, test[t]);
-    printf ("Declared capacity: %zu\n", BOTTLE_CAPACITY(bottle));
+    printf ("Declared capacity: %zu\n", test[t]);
     pthread_t doubler;
     pthread_create (&doubler, 0, twice, bottle);
 
@@ -90,7 +90,7 @@ test2 (void)
     bottle_close (bottle);
     pthread_join (doubler, 0);
     bottle_destroy (bottle);
-    printf ("%zu OK, %zu NOK (%sas expected.)\n\n", ok, nok, ok + (BOTTLE_CAPACITY(bottle) ? nok : 0) == NB ? "" : "NOT ");
+    printf ("%zu OK, %zu NOK (%s, %sas expected.)\n\n", ok, nok, nok ? "FAILED" : "SUCCEEDED", ok + (test[t] ? nok : 0) == NB ? "" : "NOT ");
   }
 }
 

@@ -104,7 +104,10 @@ If `msg` is a variable of type `msg_t`:
 
 ```c
 msg_t msg;
-bottle_recv (bottle, msg);
+while (bottle_recv (bottle, &msg))
+{
+  ...
+}
 ```
 
 ### 7. Destroy the bottle on the sender side after all messages have been received by the receiver threads
@@ -114,6 +117,16 @@ On the sender side, usually the main thread, create a bottle:
 ```c
 bottle_destroy (bottle);
 ```
+
+### Notes
+
+  - The bottle should be destroyed (`bottle_destroy`) by the thread that created it.
+  - The bottle should not be destroyed before all the senders and receivers have stopped using it.
+    `pthread_join` could be used to wait for sender and receiver threads to finish.
+  - If there are several senders, each sender should stop sending messages if `bottle_send` or `bottle_try_send` return `0` with `errno` set to `ECONNABORTED`.
+  - The bottle could as well be closed (`bottle_close`) by a receiver (there can be several) to ask the senders (there can be several) to stop sending messages.
+    Senders should then then stop sending messages if `bottle_send` or `bottle_try_send` return `0` with `errno` set to `ECONNABORTED`.
+  - In a never ending process (such as a service or the back-end side of an application), `bottle_close` and `bottle_destroy` may not be called.
 
 ### Example
 
@@ -208,8 +221,6 @@ Both styles are strictly equivalent, can be mixed and switched.
 |**Halting** |
 ||Plug                  | `BOTTLE_PLUG`                       | `bottle_plug`
 ||Unplug                | `BOTTLE_UNPLUG`                     | `bottle_unplug`
-|**Properties**         |
-||Get buffer capacity   | `BOTTLE_CAPACITY`                   | `bottle_capacity`
 
 The following text uses the recommended C-like style but the equivalent macro-like style can be used as well.
 
@@ -316,6 +327,8 @@ The capacity of the message queue is tunable, from 1 to infinity:
   It allocates and desallocates capacity dynamically as needed for messages in the pipe between producers and consumers.
   It should be used with care as it could exhaust memory if the producer rate exceeds dramatically the consumer rate.
 
+  This option is not available if `LIMITED_BUFFER` is defined as a macro at compile-time.
+
 Buffered queues are implemented as pre-allocated arrays rather than as conventional linked-list:
 elements of the array are reused to transport all messages,
 whereas with a linked list, each message would require a dynamically allocated new element in the list, adding memory management overhead.
@@ -336,7 +349,11 @@ Hereafter, *T* is a type, either standard or user defined.
 ```c
 bottle_t (T) *bottle_create (T, [size_t capacity = DEFAULT])
 ```
-> *The second argument is optional and defaults to `DEFAULT` (see **Buffered message queue** above).*
+> *The second argument is optional (it can be omitted) and defaults to `DEFAULT` for an unbuffered bottle (see **About thread communication through messages** above).*
+
+To create a **buffered** bottle, pass its *capacity* (as a second argument) to `bottle_create` (either a positive integer or `UNLIMITED`).
+
+But if there is no special reason to use a buffered bottle, **an unbuffered bottle should be used**.
 
 To transport messages of type *T*, `bottle_create` creates a pointer to a dynamically allocated message queue (usually on the sender side).
 
@@ -348,9 +365,6 @@ For instance, to create a pointer to a message queue *b* for exchanging integers
 
 The message queue is **a strongly typed** (it is a hand-made template container) FIFO queue.
 
-To create a pointer to a **buffered** message queue, pass its *capacity* as an optional (positive integer
-or `UNLIMITED`) second argument of `bottle_create`.
-
 ##### Destruction of a bottle dynamically allocated
 
 ```c
@@ -359,6 +373,13 @@ void bottle_destroy (bottle_t (T) *bottle)
 
 Thereafter, once *all the receivers are done* (see **Closing communication** below) in the user program,
 and the bottle is not needed anymore, it can be destroyed safely with `bottle_destroy`.
+
+Notes:
+
+  - The bottle should be destroyed (`bottle_destroy`) by the thread that created it.
+  - The bottle should not be destroyed before all the senders and receivers have stopped using it.
+    `pthread_join` could be used to wait for sender and receiver threads to finish.
+  - In a never ending process (such as a service or the back-end side of an application), `bottle_destroy` may not be called.
 
 #### Declaration of local (automatic) variable
 
@@ -453,18 +474,19 @@ and the bottle is not closed.
     `bottle_send` blocks until some receiver has
       retrieved at least one value previously sent (with `bottle_recv` or `bottle_try_recv`).
       
-      Note: if the bottle has `UNLIMITED` capacity, it can never be full as its capacity increases automatically as necessary to accept new messages (like a skin balloon).
+      Note: If the bottle has an `UNLIMITED` capacity, it can never be full as its capacity increases automatically as necessary to accept new messages (like a skin balloon).
 
 - `bottle_send` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
     - immediately, without waiting, if the bottle was previously closed (by `bottle_close`, see below).
     - as soon as the bottle is closed (by `bottle_close`) while waiting.
 
-      This returned value most probably indicates an error in the logic of the user program as
+      This returned value might indicates an error in the logic of the user program as
       it should be avoided to close a bottle while senders are still using it.
 
       Anyhow, this condition (returned value equal to 0) should be handled
       by the senders (which should stop the transmission of any data to the bottle).
+      A sender should stop sending messages if `bottle_send` returns `0` with `errno` set to `ECONNABORTED`.
 
 - In other cases, `bottle_send` sends the message in the bottle and returns 1.
 
@@ -529,7 +551,7 @@ Notes:
   after the senders have finished their work (either at the end
   or sequentially just after the sender treatment).
 
-- `bottle_close` can be called several times without any arm and without any effect.
+- `bottle_close` can be called several times without any arm and without any further effect.
 
 - After the call to `bottle_close` by the sender, receivers are still able to (and *should*) process the remaining messages in the bottle to avoid any memory leak due to unprocessed remaining messages.
 
@@ -539,6 +561,8 @@ Notes:
 
 - As said above, `bottle_close` is *only useful when the bottle is used to synchronise concurrent
 threads* on sender and receiver sides and need not be used in other cases (thread-safe shared FIFO queue).
+
+- In a never ending process (such as a service or the back-end side of an application), `bottle_close` may not be called.
 
 - `bottle_close` does not call `bottle_destroy` by default because the user program *should
 ensure* that all receivers have finished their work between `bottle_close`
@@ -576,10 +600,14 @@ behaves like a simple thread-safe FIFO message queue:
 - Senders can send messages without blocking with `bottle_try_send`.
 
     - `bottle_try_send` returns 0 (with `errno` set to `ENOTSUP`) if the bottle capacity is `UNBUFFERED`.
-    - `bottle_try_send` returns 0 if the bottle is closed (with `errno` set `ECONNABORTED`).
-      This most probably indicates an error in the user program as it should be avoided to close a bottle
+    - `bottle_try_send` returns 0 (with `errno` set `ECONNABORTED`) if the bottle is closed.
+
+      This might indicates an error in the user program as it should be avoided to close a bottle
       while senders are still using it.
-    - `bottle_try_send` returns 0 if the bottle is plugged (with `errno` set `EWOULDBLOCK`) or already full.
+
+      A sender should stop sending messages if `bottle_try_send` returns `0` with `errno` set to `ECONNABORTED`.
+
+    - `bottle_try_send` returns 0 (with `errno` set `EWOULDBLOCK`) if the bottle is plugged or already full.
       This indicates that a call to `bottle_send` would have blocked.
     - Otherwise, it sends a *message* in the bottle and returns 1.
 

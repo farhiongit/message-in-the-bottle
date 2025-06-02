@@ -37,7 +37,9 @@
 #include <errno.h>
 #include <stdio.h>
 
-#define UNLIMITED    ((size_t) -1)          /* Unbound buffer size (not recommended) */
+#ifndef LIMITED_BUFFER
+#  define UNLIMITED    ((size_t) -1)          /* Unbound buffer size (not recommended) */
+#endif
 #define UNBUFFERED   ((size_t)  0)          /* Unbuffered capacity for perfect thread synchronisation */
 #define DEFAULT      UNBUFFERED             /* Default is unbuffered (à la Go) */
 
@@ -141,9 +143,6 @@
 #define BOTTLE_DESTROY(self)  \
   do { (self)->vtable->Destroy ((self)); } while (0)
 
-/// size_t BOTTLE_CAPACITY (BOTTLE (T) *bottle)
-#define BOTTLE_CAPACITY(self) ((self)->capacity)
-
 /// BOTTLE (T) * BOTTLE_DECL (variable_name, [T], [size_t capacity = DEFAULT])
 #if defined(__GNUC__) || defined (__clang__)
 #define BOTTLE_DECL3(var, TYPE, capacity)  \
@@ -167,9 +166,6 @@ __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT
 
 #define bottle_close(self)        BOTTLE_CLOSE(self)
 #define bottle_destroy(self)      BOTTLE_DESTROY(self)
-
-#define bottle_capacity(self)     BOTTLE_CAPACITY(self)
-#define bottle_is_closed(self)    BOTTLE_IS_CLOSED(self)
 
 #define bottle_plug(self)         BOTTLE_PLUG(self)
 #define bottle_unplug(self)       BOTTLE_UNPLUG(self)

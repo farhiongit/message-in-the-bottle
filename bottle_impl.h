@@ -37,6 +37,13 @@
 #  define DEBUG(stmt)
 #endif
 
+#ifdef LIMITED_BUFFER
+#  undef LIMITED_BUFFER
+#  define LIMITED_BUFFER 1
+#else
+#  define LIMITED_BUFFER 0
+#endif
+
 // To be translated.
 #define TBT(text) (text)
 
@@ -91,6 +98,7 @@
   static void QUEUE_INIT_##TYPE (struct _queue_##TYPE *q, size_t capacity) \
   {                                                            \
     q->unlimited = (capacity == (size_t) -1);                        \
+    BOTTLE_ASSERT3 (!q->unlimited || !LIMITED_BUFFER, "Unauthorised use of UNLIMITED buffer.\n", 1); \
     q->capacity = ((q->unlimited || capacity == 0) ? 1 : capacity);  \
     q->size = 0;                                                     \
     BOTTLE_ASSERT (q->buffer = malloc (q->capacity * sizeof (*q->buffer))); \
@@ -209,7 +217,7 @@
   {                                                            \
     int ret = 0;                                               \
     BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
-    if (self->capacity == 0) /* unbuffered */                  \
+    if (!self->closed && self->capacity == 0) /* unbuffered */ \
     /* Barrier to synchronise the sender and the receiver */   \
     {                                                          \
       /* The thread declares it is attempting to write */      \
@@ -285,7 +293,7 @@
     int ret = 0;                                               \
     BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
     /* Barrier to synchronise the sender and the receiver */   \
-    if (self->capacity == 0) /* unbuffered */                  \
+    if (!self->closed && self->capacity == 0) /* unbuffered */ \
     {                                                          \
       /* The thread declares it is attempting to read */       \
       self->not_reading = 0;                                   \
@@ -365,9 +373,8 @@
   static void BOTTLE_CLEANUP_##TYPE (BOTTLE_##TYPE *self)      \
   {                                                            \
     BOTTLE_ASSERT (!pthread_mutex_lock (&self->mutex));        \
-    self->closed = 1;                                          \
     BOTTLE_ASSERT3 (QUEUE_IS_EMPTY (self->queue),              \
-                    "Some '" #TYPE "s' are lost.\n", 0);       \
+                    "Some '" #TYPE "s' have been lost.\n", 0); \
     BOTTLE_ASSERT (!pthread_mutex_unlock (&self->mutex));      \
     pthread_mutex_destroy (&self->mutex);                      \
     pthread_cond_destroy (&self->not_empty);                   \
