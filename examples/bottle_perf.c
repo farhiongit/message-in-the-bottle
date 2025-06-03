@@ -1,4 +1,5 @@
 #include <time.h>
+#include <pthread.h>
 #include "bottle_impl.h"
 bottle_type_declare (int);
 bottle_type_define (int);

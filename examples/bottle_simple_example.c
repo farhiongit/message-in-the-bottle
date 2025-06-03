@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #include "bottle_impl.h"        // Include necessary stuff
 typedef const char *Message;

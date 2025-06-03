@@ -21,24 +21,18 @@
 // Contact: lfarhi@sfr.fr
 ////////////////////////////////////////////////////
 
-/* A thread-safe, template, implementation of a message queue */
-
-/*TODO:
-   - Use C11 thread rather than explicit pthreads.
- */
-
-#pragma once
+/* A thread-safe and generic implementation of a message queue for thread communication and synchronisation */
 
 #ifndef __BOTTLE_H__
 #define __BOTTLE_H__
 
 #include "vfunc.h"
-#include <pthread.h>
+#include <threads.h>
 #include <errno.h>
 #include <stdio.h>
 
 #ifndef LIMITED_BUFFER
-#  define UNLIMITED    ((size_t) -1)          /* Unbound buffer size (not recommended) */
+#  define UNLIMITED  ((size_t) -1)          /* Unbound buffer size (not recommended) */
 #endif
 #define UNBUFFERED   ((size_t)  0)          /* Unbuffered capacity for perfect thread synchronisation */
 #define DEFAULT      UNBUFFERED             /* Default is unbuffered (à la Go) */
@@ -75,13 +69,13 @@
                                               can be -1 : unbounded */ \
     int                          closed;    \
     int                          frozen;    \
-    pthread_mutex_t              mutex;     \
-    pthread_cond_t               not_empty; \
-    pthread_cond_t               not_full;  \
+    mtx_t                        mutex;     \
+    cnd_t                        not_empty; \
+    cnd_t                        not_full;  \
     int                          not_reading;\
-    pthread_cond_t               reading;   \
+    cnd_t                        reading;   \
     int                          not_writing;\
-    pthread_cond_t               writing;   \
+    cnd_t                        writing;   \
     const _BOTTLE_VTABLE_##TYPE *vtable;    \
     TYPE __dummy__;                         \
   } BOTTLE_##TYPE;                          \

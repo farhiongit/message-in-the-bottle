@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #include "bottle_impl.h"
 
 // Structure of the messages brought by the bottle.
