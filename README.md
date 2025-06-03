@@ -412,7 +412,7 @@ bottle_type_define (time_t);
 
 int main (void)
 {
-  bottle_auto (b, time_t);       // Declare an automatic variable b of type bottle_t (time_t)
+  bottle_auto (b, time_t, 1);    // Declare an automatic variable b of type bottle_t (time_t)
   bottle_send (&b, time (0));    // Send a message through the bottle
   time_t val;
   bottle_recv (&b, &val);        // Receive a message through the bottle and store it in `val`
@@ -445,8 +445,7 @@ The received message feeds the variable `message`.
     This condition (returned value equal to 0) should be handled
     by the receivers to detect the end of communication between threads (end of reception of data from the bottle).
 
-- If there is data to receive (and even if the bottle has been closed in the meantime), `bottle_recv` receives a *message* from the bottle
-  (it modifies the value of the second argument *message* passed by *"reference"*) and returns 1 immediately.
+- If there is data to receive (and even if the bottle has been closed in the meantime), `bottle_recv` receives a *message* from the bottle and returns 1 immediately.
 
   Messages are received in the **exact order** they have been sent, whatever the capacity of the buffer defined by `bottle_create`.
 
@@ -469,14 +468,13 @@ and the bottle is not closed.
 - `bottle_send` waits in those cases:
 
     - If the bottle was plugged (by `bottle_plug`, see below), `bottle_send` blocks until the bottle is unplugged (by `bottle_unplug`).
-    - If the message queue is **unbuffered** (`UNBUFFERED` or `DEFAULT`), `bottle_send` blocks until some receiver has received (with `bottle_recv` or `bottle_try_recv`)
-      the value sent by a previous successful call to `bottle_send` or `bottle_try_send`.
+    - If the message queue is **unbuffered** (`UNBUFFERED` or `DEFAULT`), `bottle_send` blocks until some receiver is ready to receive (with `bottle_recv` or `bottle_try_recv`)
+      the sent value.
       *It is precisely this behaviour that ensures synchronicity between the sender and the receiver*.
     - If the message queue  is **buffered** and the buffer is of limited capacity and full,
-    `bottle_send` blocks until some receiver has
-      retrieved at least one value previously sent (with `bottle_recv` or `bottle_try_recv`).
+      `bottle_send` blocks until some receiver has retrieved at least one value previously sent (with `bottle_recv` or `bottle_try_recv`).
       
-      Note: If the bottle has an `UNLIMITED` capacity, it can never be full as its capacity increases automatically as necessary to accept new messages (like a skin balloon).
+      Note: If the bottle has an `UNLIMITED` capacity, it can (almost) never be full as its capacity increases automatically as necessary to accept new messages (like a skin balloon).
 
 - `bottle_send` returns 0 (with `errno` set to `ECONNABORTED`) in those cases:
 
