@@ -9,7 +9,8 @@ static size_t LEVEL[2 * NB_MESSAGES];
 static size_t nb_p, nb_c;
 static size_t test_number;
 
-static void *eat (void *arg)
+static void *
+eat (void *arg)
 {
   bottle_t (int) * bottle = arg;
   // Consumer
@@ -21,8 +22,8 @@ static void *eat (void *arg)
 static void
 test1 (void)
 {
-  size_t test[] = {UNBUFFERED, 1, 1000, UNLIMITED};
-  for (size_t t = 0 ; t < sizeof (test) / sizeof (*test) ; t++)
+  size_t test[] = { UNBUFFERED, 1, 1000, UNLIMITED };
+  for (size_t t = 0; t < sizeof (test) / sizeof (*test); t++)
   {
     printf ("*** TEST %lu ***\n", ++test_number);
     clock_t start = clock ();
@@ -42,18 +43,20 @@ test1 (void)
 
     printf ("%zu messages produced, %zu messages consumed in %f seconds.\n", nb_p, nb_c, (double) (clock () - start) / (double) CLOCKS_PER_SEC);
     size_t avg = 0;
-    for (size_t i = 0 ; i < sizeof (LEVEL) / sizeof (*LEVEL) ; i++)
+    for (size_t i = 0; i < sizeof (LEVEL) / sizeof (*LEVEL); i++)
       avg += LEVEL[i];
     printf ("Average buffer size : %f\n\n", ((double) avg) * sizeof (*LEVEL) / sizeof (LEVEL));
   }
 }
 
 #define TWICE(n) (2 * (n))
-static void *twice (void *arg)
+static void *
+twice (void *arg)
 {
   int v;
   bottle_t (int) * bottle = arg;
-  while (bottle_recv (bottle, &v) && bottle_send (bottle, TWICE (v))) /**/;
+  while (bottle_recv (bottle, &v) && bottle_send (bottle, TWICE (v)))
+     /**/;
   return 0;
 }
 
@@ -61,9 +64,9 @@ static void
 test2 (void)
 {
   // On an idea from https://wingolog.org/archives/2017/06/29/a-new-concurrent-ml
-  size_t test[] = {UNBUFFERED, 1};
+  size_t test[] = { UNBUFFERED, 1 };
   printf ("The unbuffered (0-sized) bottle will succeed while the buffered (1-sized) bottle will fail.\n");
-  for (size_t t = 0 ; t < sizeof (test) / sizeof (*test) ; t++)
+  for (size_t t = 0; t < sizeof (test) / sizeof (*test); t++)
   {
     printf ("*** TEST %lu ***\n", ++test_number);
     bottle_t (int) * bottle = bottle_create (int, test[t]);
@@ -84,7 +87,7 @@ test2 (void)
        - the message that is handed off in send/receive operation is never "owned" by the bottle;
        - it is either owned by a sender who is waiting at the meeting point for a receiver, or it's accepted by a receiver
        - after the transaction is complete, both parties continue on.
-       */
+     */
     for (size_t i = 0; i < NB && bottle_send (bottle, 20) && bottle_recv (bottle, &v); i++)
       v == TWICE (20) ? ++ok : ++nok;
 

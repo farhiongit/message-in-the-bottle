@@ -272,7 +272,7 @@
     else if (self->frozen)                                     \
     {                                                          \
       BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
-      return errno = EWOULDBLOCK, ret;                         \
+      return ret;                                              \
     }                                                          \
     else if (!QUEUE_IS_FULL (self->queue))                     \
     {                                                          \
@@ -280,8 +280,6 @@
       BOTTLE_ASSERT (cnd_signal (&self->not_empty) == thrd_success); \
       ret = 1;                                                 \
     }                                                          \
-    else                                                       \
-      errno = EWOULDBLOCK;                                     \
     BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
     return ret;                                                \
   }                                                            \
@@ -335,8 +333,6 @@
     }                                                          \
     else if (self->closed)                                     \
       errno = ECONNABORTED;                                    \
-    else                                                       \
-      errno = EWOULDBLOCK;                                     \
     BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
     return ret;                                                \
   }                                                            \

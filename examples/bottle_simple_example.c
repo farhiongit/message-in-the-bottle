@@ -12,7 +12,7 @@ eat (void *arg)                 // The thread that receives the messages
 {
   bottle_t (Message) * bottle = arg;
   Message m;
-  while (bottle_recv (bottle, &m))       // Receive a message
+  while (bottle_recv (bottle, &m))      // Receive a message
     printf ("...%s\n", m);
   return 0;
 }

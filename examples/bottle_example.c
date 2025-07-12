@@ -3,6 +3,7 @@
 // or
 // gcc -pthread bottle_example.c -o bottle_example
 
+#define _XOPEN_SOURCE 500
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -82,8 +83,7 @@ feed (void *arg)
     snprintf (p.s, size + 1, fmt, p.x, p.y);
     char *scpy = strdup (p.s);
 
-    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" } ?\n",
-             pthread_self (), (void *) bottle, p.x, p.y, scpy);
+    fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" } ?\n", pthread_self (), (void *) bottle, p.x, p.y, scpy);
     errno = 0;
     if (!BOTTLE_FILL (bottle, p))       // bottle <- message p
     {
@@ -95,8 +95,7 @@ feed (void *arg)
     // it could be drained from the bottle by an eater thread, and ressources of p released.
     // Ressources of p should not be used once feeded, if not by an eater: scpy is used instead.
     else
-      fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" }.\n",
-               pthread_self (), (void *) bottle, p.x, p.y, scpy);
+      fprintf (stderr, "Feeder thread %1$#lx: bottle %2$p <- { (%3$g, %4$g), \"%5$s\" }.\n", pthread_self (), (void *) bottle, p.x, p.y, scpy);
     free (scpy);
   }
 
@@ -115,13 +114,11 @@ eat (void *arg)
     fprintf (stderr, "Eater thread %1$#lx: ? <- bottle %2$p...\n", pthread_self (), (void *) bottle);
     Point p;
     errno = 0;
-    if (BOTTLE_DRAIN (bottle, &p))       // message p <- bottle
+    if (BOTTLE_DRAIN (bottle, &p))      // message p <- bottle
     {
-      fprintf (stderr, "Eater thread %1$#lx: { (%3$g, %4$g), \"%5$s\" } <- bottle %2$p.\n",
-               pthread_self (), (void *) bottle, p.x, p.y, p.s);
+      fprintf (stderr, "Eater thread %1$#lx: { (%3$g, %4$g), \"%5$s\" } <- bottle %2$p.\n", pthread_self (), (void *) bottle, p.x, p.y, p.s);
 
-      fprintf (stderr, "Eater thread %1$#lx: processing { (%2$g, %3$g), \"%4$s\" }...\n",
-               pthread_self (), p.x, p.y, p.s);
+      fprintf (stderr, "Eater thread %1$#lx: processing { (%2$g, %3$g), \"%4$s\" }...\n", pthread_self (), p.x, p.y, p.s);
       process_message (p);
       fprintf (stderr, "Eater thread %1$#lx: processed { (%2$g, %3$g), \"%4$s\" }.\n", pthread_self (), p.x, p.y, p.s);
 
@@ -144,7 +141,7 @@ int
 main (void)
 {
   size_t test[] = { UNBUFFERED, 3, UNLIMITED };
-  for (size_t t = 0 ; t < sizeof (test) / sizeof (*test) ; t++)
+  for (size_t t = 0; t < sizeof (test) / sizeof (*test); t++)
   {
     fprintf (stderr, "*** TEST %lu ***\n", t + 1);
     BOTTLE (Point) * bottle = BOTTLE_CREATE (Point, test[t]);
@@ -162,25 +159,25 @@ main (void)
         break;
     }
 
-    pthread_t eater[3];           // 3 eater threads
+    pthread_t eater[3];         // 3 eater threads
     for (unsigned int i = 0; i < sizeof (eater) / sizeof (*eater); i++)
-      if (!pthread_create (&eater[i], 0, eat, bottle))    // Pass the bottle as an argument of the eater.
+      if (!pthread_create (&eater[i], 0, eat, bottle))  // Pass the bottle as an argument of the eater.
         fprintf (stderr, "Eater thread %#lx started.\n", eater[i]);
 
     pthread_t feeder;
-    if (!pthread_create (&feeder, 0, feed, bottle))       // Pass the bottle as an argument of the feeder.
+    if (!pthread_create (&feeder, 0, feed, bottle))     // Pass the bottle as an argument of the feeder.
       fprintf (stderr, "Feeder thread %#lx started.\n", feeder);
 
     pthread_t stopper;
-    if (!pthread_create (&stopper, 0, stop, bottle))      // Pass the bottle as an argument.
+    if (!pthread_create (&stopper, 0, stop, bottle))    // Pass the bottle as an argument.
       fprintf (stderr, "Stopper thread %#lx started.\n", stopper);
 
     pthread_t starter;
-    if (!pthread_create (&starter, 0, restart, bottle))   // Pass the bottle as an argument.
+    if (!pthread_create (&starter, 0, restart, bottle)) // Pass the bottle as an argument.
       fprintf (stderr, "Starter thread %#lx started.\n", starter);
 
     pthread_t closer;
-    if (!pthread_create (&closer, 0, close_bottle, bottle))       // Pass the bottle as an argument.
+    if (!pthread_create (&closer, 0, close_bottle, bottle))     // Pass the bottle as an argument.
       fprintf (stderr, "Closer thread %#lx started.\n", closer);
 
     // Wait for all messages to be fed through the bottle.

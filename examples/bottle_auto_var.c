@@ -4,7 +4,8 @@
 bottle_type_declare (time_t);
 bottle_type_define (time_t);
 
-int main (void)
+int
+main (void)
 {
   bottle_auto (b, time_t, 1);
   bottle_send (&b, time (0));

@@ -1,47 +1,63 @@
+#undef NDEBUG
 #include <stdio.h>
+#include <assert.h>
+#include <threads.h>
 #include "bottle_impl.h"
-DECLARE_BOTTLE (int);
-DEFINE_BOTTLE (int);
+bottle_type_declare (int);
+bottle_type_define (int);
 
-static void write (BOTTLE (int) *b)
+static void
+write (bottle_t (int) *fifo)
 {
-  for (int i = 1 ; i <= 3 ; i++)
-    BOTTLE_TRY_FILL (b, i);
+  errno = 0;
+  for (int i = 1; i <= 3 && !errno; i++)
+    if (bottle_try_send (fifo, i) && !errno)
+      printf ("%i -->\n", i);
+  assert (!errno);
 }
 
-static void read (BOTTLE (int) *b)
+static int
+read (void *arg)
 {
+  bottle_t (int) * fifo = arg;
   int i;
-  while (BOTTLE_TRY_DRAIN (b, &i))
-    printf ("%i\n", i);
+  errno = 0;
+  while (!errno)
+    if (bottle_try_recv (fifo, &i) && !errno)
+      printf ("--> %i\n", i);
+  return errno;
 }
 
-int main (void)
+int
+main (void)
 {
-  BOTTLE (int) * fifo;
-
+  bottle_t (int) * fifo;
+  thrd_t thread_id;
+  printf ("---------------------------------------------------------------\n");
   const size_t BOTTLE_CAPACITY = 10;
-  fifo = BOTTLE_CREATE (int, BOTTLE_CAPACITY);
+  fifo = bottle_create (int, BOTTLE_CAPACITY);
   printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   write (fifo);
+  bottle_close (fifo);          // Close to indicate writing is done.
   printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
-  read (fifo);
+  thrd_create (&thread_id, read, fifo);
+  thrd_join (thread_id, 0);
   printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
-  BOTTLE_CLOSE (fifo);
-  BOTTLE_DESTROY (fifo);
-  printf ("\n");
-  fifo = BOTTLE_CREATE (int, UNLIMITED);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
+  bottle_destroy (fifo);
+  printf ("---------------------------------------------------------------\n");
+  fifo = bottle_create (int, UNLIMITED);
+  printf ("Declared Capacity %zu\n", UNLIMITED);
   printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
   write (fifo);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
-  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
-  read (fifo);
-  printf ("Declared Capacity %zu\n", BOTTLE_CAPACITY);
-  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));
-  BOTTLE_CLOSE (fifo);
-  BOTTLE_DESTROY (fifo);
+  bottle_close (fifo);          // Close to indicate writing is done.
+  printf ("Declared Capacity %zu\n", UNLIMITED);
+  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));    // The capacity adapts to the number of transmitted messages.
+  thrd_create (&thread_id, read, fifo);
+  thrd_join (thread_id, 0);
+  printf ("Declared Capacity %zu\n", UNLIMITED);
+  printf ("Effective capacity %zu\n", QUEUE_CAPACITY (fifo->queue));    // The capacity adapts to the number of transmitted messages.
+  bottle_destroy (fifo);
 }

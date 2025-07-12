@@ -14,14 +14,14 @@ struct thread_args
 {
   size_t nb_rings;
   char from, to;
-  bottle_t (Move) *moves_queue;
+    bottle_t (Move) * moves_queue;
 };
 
 static void
 print_peg (size_t nb_rings, char *rings, char peg)
 {
   fprintf (stderr, "%c :|-", peg);
-  for (size_t i = nb_rings ; i > 0 ; i--)
+  for (size_t i = nb_rings; i > 0; i--)
     if (rings[i - 1] == peg)
       fprintf (stderr, "%zu-", i);
   fprintf (stderr, ">\n");
@@ -35,12 +35,12 @@ repeat_moves (void *arg)
   char to = (*(struct thread_args *) arg).to;
   unsigned long *ret = malloc (sizeof (*ret));
   *ret = (unsigned long) -1;
-  char *rings = malloc (nb_rings * sizeof (*rings));  // Array of rings, from the smallest to the largest.
+  char *rings = malloc (nb_rings * sizeof (*rings));    // Array of rings, from the smallest to the largest.
   for (size_t ring = 0; ring < nb_rings; ring++)
     rings[ring] = from;
   fprintf (stderr, "Starting with:\n");
   print_peg (nb_rings, rings, from);
-  bottle_t (Move) *moves_queue = (*(struct thread_args *) arg).moves_queue;
+  bottle_t (Move) * moves_queue = (*(struct thread_args *) arg).moves_queue;
 
   size_t nb_moves = 0;
   Move m;
@@ -56,7 +56,7 @@ repeat_moves (void *arg)
         break;
       }
       else if (rings[ring] == m.to)
-        return ret;  // Forbidden move.
+        return ret;             // Forbidden move.
 
   fprintf (stderr, "Ending with:\n");
   print_peg (nb_rings, rings, to);
@@ -90,7 +90,7 @@ main (int argc, char **argv)
 {
   setlocale (LC_ALL, "");
   size_t nb_rings = argc > 1 ? strtoul (argv[1], 0, 0) : 8;
-  bottle_t (Move) *moves_queue = bottle_create (Move, UNLIMITED);      // The queue has infinite size.
+  bottle_t (Move) * moves_queue = bottle_create (Move, UNLIMITED);      // The queue has infinite size.
 
   pthread_t repeater;
   struct thread_args args = {.nb_rings = nb_rings,.moves_queue = moves_queue,.from = 'A',.to = 'C' };
