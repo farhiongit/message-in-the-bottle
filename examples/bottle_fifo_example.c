@@ -25,7 +25,8 @@ read (void *arg)
   while (!errno)
     if (bottle_try_recv (fifo, &i) && !errno)
       printf ("--> %i\n", i);
-  return errno;
+  assert (errno == ECONNABORTED);
+  return 0;
 }
 
 int
