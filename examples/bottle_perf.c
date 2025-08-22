@@ -50,52 +50,32 @@ test1 (void)
   }
 }
 
-#define TWICE(n) (1 + (n))
-#define TRACE 0
+#define APPLY(n) (1 + (n))
 static void *
-twice (void *arg)
+read_apply_write (void *arg)
 {
   int v;
   bottle_t (int) * bottle = arg;
-  int ret = 1;
-  if (TRACE) printf ("A\n");
-  while (ret)
-  {
-    if (ret)
-      ret = bottle_recv (bottle, &v);
-    if (ret && TRACE)
-      printf ("               A --> %10i\n", v);
-    if (ret)
-      ret = bottle_send (bottle, TWICE (v));
-    if (ret && TRACE)
-      printf ("                     %10i --> A\n", TWICE (v));
-  }
-  if (TRACE) printf ("A\n");
+  while (bottle_recv (bottle, &v) && bottle_send (bottle, APPLY (v)))
+    /**/;
   return 0;
 }
 
 static void *
-twice_try (void *arg)
+read_apply_write_try (void *arg)
 {
   int v;
   bottle_t (int) * bottle = arg;
   errno = 0;
-  if (TRACE) printf ("A\n");
   while (!errno)
   {
-    int ret = 1;
+    int ret;
+    while (!(ret = bottle_try_recv (bottle, &v)) && !errno)
+      nanosleep (&(struct timespec ){0, 1000}, 0);
     if (ret)
-      while (!(ret = bottle_try_recv (bottle, &v)) && !errno)
-        { if (TRACE) printf (".\n"); nanosleep (&(struct timespec ){0, 1000}, 0); }
-    if (ret && TRACE)
-      printf ("               A --> %10i\n", v);
-    if (ret)
-      while (!(ret = bottle_try_send (bottle, TWICE (v))) && !errno)
-        { if (TRACE) printf (".\n"); nanosleep (&(struct timespec ){0, 1000}, 0); }
-    if (ret && TRACE)
-      printf ("                     %10i --> A\n", TWICE (v));
+      while (!(ret = bottle_try_send (bottle, APPLY (v))) && !errno)
+        nanosleep (&(struct timespec ){0, 1000}, 0);
   }
-  if (TRACE) printf ("A\n");
   return 0;
 }
 
@@ -104,7 +84,7 @@ test2 (void)
 {
   // On an idea from https://wingolog.org/archives/2017/06/29/a-new-concurrent-ml
   size_t bufsize[] = { UNBUFFERED, 1 };
-  void *(*f[]) (void *arg) = { twice, twice_try };
+  void *(*f[]) (void *arg) = { read_apply_write, read_apply_write_try };
   printf ("The unbuffered (0-sized) bottle will succeed while the buffered (1-sized) bottle will fail.\n");
   for (size_t u = 0; u < sizeof (f) / sizeof (*f); u++)
     for (size_t t = 0; t < sizeof (bufsize) / sizeof (*bufsize); t++)
@@ -112,11 +92,11 @@ test2 (void)
       printf ("*** TEST %lu ***\n", ++test_number);
       bottle_t (int) * bottle = bottle_create (int, bufsize[t]);
       printf ("Declared capacity: %zu\n", bufsize[t]);
-      pthread_t doubler;
-      pthread_create (&doubler, 0, f[u], bottle);
-      printf ("%s", f[u] == twice_try ? "TRY receive and send\n" : "");
+      pthread_t actor;
+      pthread_create (&actor, 0, f[u], bottle);
+      printf ("%s", f[u] == read_apply_write_try ? "TRY receive and send\n" : "");
 
-      const size_t NB = TRACE ? 10 : 10000;
+      const size_t NB = 100000;
       int v, r;
       size_t ok = 0;
       size_t nok = 0;
@@ -130,25 +110,11 @@ test2 (void)
          - it is either owned by a sender who is waiting at the meeting point for a receiver, or it's accepted by a receiver
          - after the transaction is complete, both parties continue on.
        */
-      int ret = 1;
-      if (TRACE) printf ("B\n");
-      for (size_t i = 0; i < NB && ret; i++)
-      {
-        if (ret)
-          ret = bottle_send (bottle, (r = (int)(rand ()) / 2));
-        if (ret && TRACE)
-          printf ("%10i --> B\n", r);
-        if (ret)
-          ret = bottle_recv (bottle, &v);
-        if (ret && TRACE)
-          printf ("                                    B --> %10i (%s)\n", v, v == TWICE (r) ? "OK" : "NOK");
-        if (ret)
-          v == TWICE (r) ? ++ok : ++nok;
-      }
-      if (TRACE) printf ("B\n");
+      for (size_t i = 0; i < NB && bottle_send (bottle, (r = (int)(rand ()) / 2)) && bottle_recv (bottle, &v); i++)
+        v == APPLY (r) ? ++ok : ++nok;
 
       bottle_close (bottle);
-      pthread_join (doubler, 0);
+      pthread_join (actor, 0);
       bottle_destroy (bottle);
       printf ("%zu OK, %zu NOK (%s, %sas expected.)\n\n", ok, nok, nok ? "FAILED" : "SUCCEEDED", ok + (bufsize[t] ? nok : 0) == NB ? "" : "NOT ");
     }
