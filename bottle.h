@@ -24,20 +24,21 @@
 /* A thread-safe and generic implementation of a message queue for thread communication and synchronisation */
 
 #ifndef __BOTTLE_H__
-#define __BOTTLE_H__
+#  define __BOTTLE_H__
 
-#include "vfunc.h"
-#include <threads.h>
-#include <errno.h>
-#include <stdio.h>
+#  include "vfunc.h"
+#  include <threads.h>
+#  include <errno.h>
+#  include <stdio.h>
 
-#ifndef LIMITED_BUFFER
-#  define UNLIMITED  ((size_t) -1)          /* Unbound buffer size (not recommended) */
-#endif
-#define UNBUFFERED   ((size_t)  0)          /* Unbuffered capacity for perfect thread synchronisation */
-#define DEFAULT      UNBUFFERED             /* Default is unbuffered (à la Go) */
+#  ifndef LIMITED_BUFFER
+#    define UNLIMITED  ((size_t) -1)    /* Unbound buffer size (not recommended) */
+#  endif
+#  define UNBUFFERED   ((size_t)  0)    /* Unbuffered capacity for perfect thread synchronisation */
+#  define DEFAULT      UNBUFFERED
+                                /* Default is unbuffered (à la Go) */
 
-#define DECLARE_BOTTLE( TYPE )     \
+#  define DECLARE_BOTTLE( TYPE )     \
 \
   struct _BOTTLE_##TYPE;           \
 \
@@ -84,84 +85,84 @@
   void BOTTLE_INIT_##TYPE (BOTTLE_##TYPE *self, size_t capacity);  \
   struct __useless_struct_to_allow_trailing_semicolon__
 
-#define BOTTLE( TYPE )  BOTTLE_##TYPE
+#  define BOTTLE( TYPE )  BOTTLE_##TYPE
 
 /// BOTTLE (T) * BOTTLE_CREATE ([T], [size_t capacity = DEFAULT])
-#define BOTTLE_CREATE1( TYPE ) \
+#  define BOTTLE_CREATE1( TYPE ) \
   BOTTLE_CREATE_##TYPE(DEFAULT)
-#define BOTTLE_CREATE2( TYPE, capacity ) \
+#  define BOTTLE_CREATE2( TYPE, capacity ) \
   BOTTLE_CREATE_##TYPE(capacity)
-#define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
+#  define BOTTLE_CREATE(...) VFUNC(BOTTLE_CREATE, __VA_ARGS__)
 
 /// int BOTTLE_FILL (BOTTLE (T) *bottle, [T message])
-#define BOTTLE_FILL2(self, message)  \
+#  define BOTTLE_FILL2(self, message)  \
   ((self)->vtable->Fill ((self), (message)))
-#define BOTTLE_FILL1(self)  \
+#  define BOTTLE_FILL1(self)  \
   ((self)->vtable->Fill ((self), ((self)->__dummy__)))
-#define BOTTLE_FILL(...) VFUNC(BOTTLE_FILL, __VA_ARGS__)
+#  define BOTTLE_FILL(...) VFUNC(BOTTLE_FILL, __VA_ARGS__)
 
 /// int BOTTLE_TRY_FILL (BOTTLE (T) *bottle, [T message])
-#define BOTTLE_TRY_FILL2(self, message)  \
+#  define BOTTLE_TRY_FILL2(self, message)  \
   ((self)->vtable->TryFill ((self), (message)))
-#define BOTTLE_TRY_FILL1(self)  \
+#  define BOTTLE_TRY_FILL1(self)  \
   ((self)->vtable->TryFill ((self), ((self)->__dummy__)))
-#define BOTTLE_TRY_FILL(...) VFUNC(BOTTLE_TRY_FILL, __VA_ARGS__)
+#  define BOTTLE_TRY_FILL(...) VFUNC(BOTTLE_TRY_FILL, __VA_ARGS__)
 
 /// int BOTTLE_DRAIN (BOTTLE (T) *bottle, [T *message])
-#define BOTTLE_DRAIN2(self, message)  \
+#  define BOTTLE_DRAIN2(self, message)  \
   ((self)->vtable->Drain ((self), (message)))
-#define BOTTLE_DRAIN1(self)  \
+#  define BOTTLE_DRAIN1(self)  \
   ((self)->vtable->Drain ((self), &((self)->__dummy__)))
-#define BOTTLE_DRAIN(...) VFUNC(BOTTLE_DRAIN, __VA_ARGS__)
+#  define BOTTLE_DRAIN(...) VFUNC(BOTTLE_DRAIN, __VA_ARGS__)
 
 /// int BOTTLE_TRY_DRAIN (BOTTLE (T) *bottle, [T *message])
-#define BOTTLE_TRY_DRAIN2(self, message)  \
+#  define BOTTLE_TRY_DRAIN2(self, message)  \
   ((self)->vtable->TryDrain ((self), (message)))
-#define BOTTLE_TRY_DRAIN1(self)  \
+#  define BOTTLE_TRY_DRAIN1(self)  \
   ((self)->vtable->TryDrain ((self), &((self)->__dummy__)))
-#define BOTTLE_TRY_DRAIN(...) VFUNC(BOTTLE_TRY_DRAIN, __VA_ARGS__)
+#  define BOTTLE_TRY_DRAIN(...) VFUNC(BOTTLE_TRY_DRAIN, __VA_ARGS__)
 
 /// void BOTTLE_PLUG (BOTTLE (T) *bottle)
-#define BOTTLE_PLUG(self)  \
+#  define BOTTLE_PLUG(self)  \
   do { (self)->vtable->Plug ((self)); } while (0)
 
 /// void BOTTLE_UNPLUG (BOTTLE (T) *bottle)
-#define BOTTLE_UNPLUG(self)  \
+#  define BOTTLE_UNPLUG(self)  \
   do { (self)->vtable->Unplug ((self)); } while (0)
 
 /// void BOTTLE_CLOSE (BOTTLE (T) *bottle)
-#define BOTTLE_CLOSE(self)  \
+#  define BOTTLE_CLOSE(self)  \
   do { (self)->vtable->Close ((self)); } while (0)
 
 /// void BOTTLE_DESTROY (BOTTLE (T) *bottle)
-#define BOTTLE_DESTROY(self)  \
+#  define BOTTLE_DESTROY(self)  \
   do { (self)->vtable->Destroy ((self)); } while (0)
 
 /// BOTTLE (T) * BOTTLE_DECL (variable_name, [T], [size_t capacity = DEFAULT])
-#if defined(__GNUC__) || defined (__clang__)
-#define BOTTLE_DECL3(var, TYPE, capacity)  \
+#  if defined(__GNUC__) || defined (__clang__)
+#    define BOTTLE_DECL3(var, TYPE, capacity)  \
 __attribute__ ((cleanup (BOTTLE_CLEANUP_##TYPE))) BOTTLE_##TYPE var; BOTTLE_INIT_##TYPE (&var, capacity)
-#define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, DEFAULT)
-#define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
-#endif
+#    define BOTTLE_DECL2(var, TYPE) BOTTLE_DECL3(var, TYPE, DEFAULT)
+#    define BOTTLE_DECL(...) VFUNC(BOTTLE_DECL, __VA_ARGS__)
+#  endif
 
 /// A more C like syntax
-#define bottle_type_declare(...)  DECLARE_BOTTLE(__VA_ARGS__)
-#define bottle_type_define(...)   DEFINE_BOTTLE(__VA_ARGS__)
+#  define bottle_type_declare(...)  DECLARE_BOTTLE(__VA_ARGS__)
+#  define bottle_type_define(...)   DEFINE_BOTTLE(__VA_ARGS__)
 
-#define bottle_t(type)            BOTTLE(type)
-#define bottle_create(...)        BOTTLE_CREATE(__VA_ARGS__)
-#define bottle_auto(...)          BOTTLE_DECL(__VA_ARGS__)
+#  define bottle_t(type)            BOTTLE(type)
+#  define bottle_create(...)        BOTTLE_CREATE(__VA_ARGS__)
+#  define bottle_auto(...)          BOTTLE_DECL(__VA_ARGS__)
 
-#define bottle_send(...)          BOTTLE_FILL(__VA_ARGS__)
-#define bottle_try_send(...)      BOTTLE_TRY_FILL(__VA_ARGS__)
-#define bottle_recv(...)          BOTTLE_DRAIN(__VA_ARGS__)
-#define bottle_try_recv(...)      BOTTLE_TRY_DRAIN(__VA_ARGS__)
+#  define bottle_send(...)          BOTTLE_FILL(__VA_ARGS__)
+#  define bottle_try_send(...)      BOTTLE_TRY_FILL(__VA_ARGS__)
+#  define bottle_recv(...)          BOTTLE_DRAIN(__VA_ARGS__)
+#  define bottle_try_recv(...)      BOTTLE_TRY_DRAIN(__VA_ARGS__)
 
-#define bottle_close(self)        BOTTLE_CLOSE(self)
-#define bottle_destroy(self)      BOTTLE_DESTROY(self)
+#  define bottle_close(self)        BOTTLE_CLOSE(self)
+#  define bottle_destroy(self)      BOTTLE_DESTROY(self)
 
-#define bottle_plug(self)         BOTTLE_PLUG(self)
-#define bottle_unplug(self)       BOTTLE_UNPLUG(self)
+#  define bottle_plug(self)         BOTTLE_PLUG(self)
+#  define bottle_unplug(self)       BOTTLE_UNPLUG(self)
 
 #endif

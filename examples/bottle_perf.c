@@ -57,7 +57,7 @@ read_apply_write (void *arg)
   int v;
   bottle_t (int) * bottle = arg;
   while (bottle_recv (bottle, &v) && bottle_send (bottle, APPLY (v)))
-    /**/;
+     /**/;
   return 0;
 }
 
@@ -71,10 +71,12 @@ read_apply_write_try (void *arg)
   {
     int ret;
     while (!(ret = bottle_try_recv (bottle, &v)) && !errno)
-      nanosleep (&(struct timespec ){0, 1000}, 0);
+      nanosleep (&(struct timespec)
+                 { 0, 1000 }, 0);
     if (ret)
       while (!(ret = bottle_try_send (bottle, APPLY (v))) && !errno)
-        nanosleep (&(struct timespec ){0, 1000}, 0);
+        nanosleep (&(struct timespec)
+                   { 0, 1000 }, 0);
   }
   return 0;
 }
@@ -110,7 +112,7 @@ test2 (void)
          - it is either owned by a sender who is waiting at the meeting point for a receiver, or it's accepted by a receiver
          - after the transaction is complete, both parties continue on.
        */
-      for (size_t i = 0; i < NB && bottle_send (bottle, (r = (int)(rand ()) / 2)) && bottle_recv (bottle, &v); i++)
+      for (size_t i = 0; i < NB && bottle_send (bottle, (r = (int) (rand ()) / 2)) && bottle_recv (bottle, &v); i++)
         v == APPLY (r) ? ++ok : ++nok;
 
       bottle_close (bottle);

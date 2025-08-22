@@ -21,24 +21,24 @@
 ////////////////////////////////////////////////////
 
 #ifndef __BOTTLE_IMPL_H__
-#define __BOTTLE_IMPL_H__
+#  define __BOTTLE_IMPL_H__
 
-#include "bottle.h"
-#include <stdlib.h>
-#include <stddef.h>
-#include <errno.h>
+#  include "bottle.h"
+#  include <stdlib.h>
+#  include <stddef.h>
+#  include <errno.h>
 
-#ifdef LIMITED_BUFFER
-#  undef LIMITED_BUFFER
-#  define LIMITED_BUFFER 1
-#else
-#  define LIMITED_BUFFER 0
-#endif
+#  ifdef LIMITED_BUFFER
+#    undef LIMITED_BUFFER
+#    define LIMITED_BUFFER 1
+#  else
+#    define LIMITED_BUFFER 0
+#  endif
 
 // To be translated.
-#define TBT(text) (text)
+#  define TBT(text) (text)
 
-#define BOTTLE_ASSERT3(cond, msg, fatal) \
+#  define BOTTLE_ASSERT3(cond, msg, fatal) \
   do {\
     if (!(cond)) \
     {\
@@ -47,7 +47,7 @@
       if (fatal) thrd_exit (0) ;\
     }\
   } while(0)
-#define BOTTLE_ASSERT(cond) \
+#  define BOTTLE_ASSERT(cond) \
   do {\
     if (!(cond)) \
     {\
@@ -56,14 +56,14 @@
     }\
   } while(0)
 
-#define QUEUE_IS_EXHAUSTED(queue) ((queue).reader_head == (queue).writer_head)
-#define QUEUE_IS_FULL(queue) (!((queue).unlimited && (queue).capacity < (size_t) -1) && QUEUE_IS_EXHAUSTED(queue))  // An unbounded queue can't be full (almost)
-#define QUEUE_IS_EMPTY(queue) ((queue).reader_head == 0)
-#define QUEUE_CAPACITY(queue) ((queue).capacity)
-#define QUEUE_SIZE(queue) ((queue).size)
-#define QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE(capacity) ((capacity) * 2)
+#  define QUEUE_IS_EXHAUSTED(queue) ((queue).reader_head == (queue).writer_head)
+#  define QUEUE_IS_FULL(queue) (!((queue).unlimited && (queue).capacity < (size_t) -1) && QUEUE_IS_EXHAUSTED(queue))    // An unbounded queue can't be full (almost)
+#  define QUEUE_IS_EMPTY(queue) ((queue).reader_head == 0)
+#  define QUEUE_CAPACITY(queue) ((queue).capacity)
+#  define QUEUE_SIZE(queue) ((queue).size)
+#  define QUEUE_UNLIMITED_CAPACITY_GROWTH_RULE(capacity) ((capacity) * 2)
 
-#define DEFINE_BOTTLE( TYPE )                                                 \
+#  define DEFINE_BOTTLE( TYPE )                                                 \
   static int  BOTTLE_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);         \
   static int  BOTTLE_TRY_FILL_##TYPE (BOTTLE_##TYPE *self, TYPE message);     \
   static int  BOTTLE_DRAIN_##TYPE (BOTTLE_##TYPE *self, TYPE *message);       \
