@@ -663,7 +663,6 @@ behaves like a simple thread-safe FIFO message queue:
 
 - Receivers can receive messages without blocking with `bottle_try_recv`.
 
-    - `bottle_try_recv` returns 0 (with `errno` set to `ENOTSUP`) if the bottle capacity is `UNBUFFERED` (unauthorised).
     - `bottle_try_recv` returns 0 (with `errno` set to `ECONNABORTED`) if the bottle is empty and closed.
 
       A receiver should stop receiving messages if `bottle_try_recv` returns `0` with `errno` set to `ECONNABORTED`.
@@ -675,7 +674,6 @@ behaves like a simple thread-safe FIFO message queue:
 
 - Senders can send messages without blocking with `bottle_try_send`.
 
-    - `bottle_try_send` returns 0 (with `errno` set to `ENOTSUP`) if the bottle capacity is `UNBUFFERED` (unauthorised).
     - `bottle_try_send` returns 0 (with `errno` set `ECONNABORTED`) if the bottle is closed.
 
       This might indicates an error in the user program as it should be avoided to close a bottle

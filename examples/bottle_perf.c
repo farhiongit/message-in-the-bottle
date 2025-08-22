@@ -1,5 +1,6 @@
 #include <time.h>
 #include <pthread.h>
+#include <assert.h>
 #include "bottle_impl.h"
 bottle_type_declare (int);
 bottle_type_define (int);
@@ -49,14 +50,52 @@ test1 (void)
   }
 }
 
-#define TWICE(n) (2 * (n))
+#define TWICE(n) (1 + (n))
+#define TRACE 0
 static void *
 twice (void *arg)
 {
   int v;
   bottle_t (int) * bottle = arg;
-  while (bottle_recv (bottle, &v) && bottle_send (bottle, TWICE (v)))
-     /**/;
+  int ret = 1;
+  if (TRACE) printf ("A\n");
+  while (ret)
+  {
+    if (ret)
+      ret = bottle_recv (bottle, &v);
+    if (ret && TRACE)
+      printf ("               A --> %10i\n", v);
+    if (ret)
+      ret = bottle_send (bottle, TWICE (v));
+    if (ret && TRACE)
+      printf ("                     %10i --> A\n", TWICE (v));
+  }
+  if (TRACE) printf ("A\n");
+  return 0;
+}
+
+static void *
+twice_try (void *arg)
+{
+  int v;
+  bottle_t (int) * bottle = arg;
+  errno = 0;
+  if (TRACE) printf ("A\n");
+  while (!errno)
+  {
+    int ret = 1;
+    if (ret)
+      while (!(ret = bottle_try_recv (bottle, &v)) && !errno)
+        { if (TRACE) printf (".\n"); nanosleep (&(struct timespec ){0, 1000}, 0); }
+    if (ret && TRACE)
+      printf ("               A --> %10i\n", v);
+    if (ret)
+      while (!(ret = bottle_try_send (bottle, TWICE (v))) && !errno)
+        { if (TRACE) printf (".\n"); nanosleep (&(struct timespec ){0, 1000}, 0); }
+    if (ret && TRACE)
+      printf ("                     %10i --> A\n", TWICE (v));
+  }
+  if (TRACE) printf ("A\n");
   return 0;
 }
 
@@ -64,38 +103,55 @@ static void
 test2 (void)
 {
   // On an idea from https://wingolog.org/archives/2017/06/29/a-new-concurrent-ml
-  size_t test[] = { UNBUFFERED, 1 };
+  size_t bufsize[] = { UNBUFFERED, 1 };
+  void *(*f[]) (void *arg) = { twice, twice_try };
   printf ("The unbuffered (0-sized) bottle will succeed while the buffered (1-sized) bottle will fail.\n");
-  for (size_t t = 0; t < sizeof (test) / sizeof (*test); t++)
-  {
-    printf ("*** TEST %lu ***\n", ++test_number);
-    bottle_t (int) * bottle = bottle_create (int, test[t]);
-    printf ("Declared capacity: %zu\n", test[t]);
-    pthread_t doubler;
-    pthread_create (&doubler, 0, twice, bottle);
+  for (size_t u = 0; u < sizeof (f) / sizeof (*f); u++)
+    for (size_t t = 0; t < sizeof (bufsize) / sizeof (*bufsize); t++)
+    {
+      printf ("*** TEST %lu ***\n", ++test_number);
+      bottle_t (int) * bottle = bottle_create (int, bufsize[t]);
+      printf ("Declared capacity: %zu\n", bufsize[t]);
+      pthread_t doubler;
+      pthread_create (&doubler, 0, f[u], bottle);
+      printf ("%s", f[u] == twice_try ? "TRY receive and send\n" : "");
 
-    const size_t NB = 10000;
-    int v;
-    size_t ok = 0;
-    size_t nok = 0;
-    // The main function send a value, then immediately read a response from the same channel.
-    /* If the bottle is buffered (size 1), it might read the sent value instead of the doubled value supplied by the 'twice' thread (it's not deterministic).
-       Likewise the double routine could read its responses as its inputs.
-       If the bottle is UNBUFFERED, it is a meeting-place:
-       - processes meet to exchange values;
-       - whichever party arrives first has to wait for the other party to show up;
-       - the message that is handed off in send/receive operation is never "owned" by the bottle;
-       - it is either owned by a sender who is waiting at the meeting point for a receiver, or it's accepted by a receiver
-       - after the transaction is complete, both parties continue on.
-     */
-    for (size_t i = 0; i < NB && bottle_send (bottle, 20) && bottle_recv (bottle, &v); i++)
-      v == TWICE (20) ? ++ok : ++nok;
+      const size_t NB = TRACE ? 10 : 10000;
+      int v, r;
+      size_t ok = 0;
+      size_t nok = 0;
+      // The main function send a value, then immediately read a response from the same channel.
+      /* If the bottle is buffered (size 1), it might read the sent value instead of the doubled value supplied by the 'twice' thread (it's not deterministic).
+         Likewise the double routine could read its responses as its inputs.
+         If the bottle is UNBUFFERED, it is a meeting-place:
+         - processes meet to exchange values;
+         - whichever party arrives first has to wait for the other party to show up;
+         - the message that is handed off in send/receive operation is never "owned" by the bottle;
+         - it is either owned by a sender who is waiting at the meeting point for a receiver, or it's accepted by a receiver
+         - after the transaction is complete, both parties continue on.
+       */
+      int ret = 1;
+      if (TRACE) printf ("B\n");
+      for (size_t i = 0; i < NB && ret; i++)
+      {
+        if (ret)
+          ret = bottle_send (bottle, (r = (int)(rand ()) / 2));
+        if (ret && TRACE)
+          printf ("%10i --> B\n", r);
+        if (ret)
+          ret = bottle_recv (bottle, &v);
+        if (ret && TRACE)
+          printf ("                                    B --> %10i (%s)\n", v, v == TWICE (r) ? "OK" : "NOK");
+        if (ret)
+          v == TWICE (r) ? ++ok : ++nok;
+      }
+      if (TRACE) printf ("B\n");
 
-    bottle_close (bottle);
-    pthread_join (doubler, 0);
-    bottle_destroy (bottle);
-    printf ("%zu OK, %zu NOK (%s, %sas expected.)\n\n", ok, nok, nok ? "FAILED" : "SUCCEEDED", ok + (test[t] ? nok : 0) == NB ? "" : "NOT ");
-  }
+      bottle_close (bottle);
+      pthread_join (doubler, 0);
+      bottle_destroy (bottle);
+      printf ("%zu OK, %zu NOK (%s, %sas expected.)\n\n", ok, nok, nok ? "FAILED" : "SUCCEEDED", ok + (bufsize[t] ? nok : 0) == NB ? "" : "NOT ");
+    }
 }
 
 int

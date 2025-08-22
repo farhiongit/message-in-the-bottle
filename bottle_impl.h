@@ -28,13 +28,6 @@
 #include <stddef.h>
 #include <errno.h>
 
-#ifdef DEBUG
-#  undef DEBUG
-#  define DEBUG(stmt) (stmt)
-#else
-#  define DEBUG(stmt)
-#endif
-
 #ifdef LIMITED_BUFFER
 #  undef LIMITED_BUFFER
 #  define LIMITED_BUFFER 1
@@ -224,20 +217,15 @@
       /* blocks until there is another thread attempting to receive a message ... */ \
       while (!self->closed && self->not_reading)               \
         BOTTLE_ASSERT (cnd_wait (&self->reading, &self->mutex) == thrd_success); \
-      self->not_reading = 1;                                   \
-    }                                                          \
-    if (self->closed)                                          \
-    {                                                          \
-      BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
-      return errno = ECONNABORTED, ret;                        \
+      self->not_reading = 1; /* The writer declares the end of reading (asap to avoid writing twice) */ \
     }                                                          \
     while (!self->closed &&                                    \
            (self->frozen || QUEUE_IS_FULL (self->queue)))      \
       BOTTLE_ASSERT (cnd_wait (&self->not_full, &self->mutex) == thrd_success); \
-    if (self->closed) /* Again. In case the bottle would have been closed while waiting */ \
+    if (self->closed)                                          \
     {                                                          \
       BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
-      return errno = ECONNABORTED, ret;                        \
+      return self->not_writing = 1, errno = ECONNABORTED, ret; \
     }                                                          \
     else if (!self->frozen && !QUEUE_IS_FULL (self->queue))    \
     {                                                          \
@@ -259,25 +247,30 @@
   {                                                            \
     int ret = 0;                                               \
     BOTTLE_ASSERT (mtx_lock (&self->mutex) == thrd_success);   \
-    if (self->capacity == 0) /* unbuffered */                  \
-    {                                                          \
-      BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
-      return errno = ENOTSUP, ret;                             \
-    }                                                          \
     if (self->closed)                                          \
     {                                                          \
       BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
-      return errno = ECONNABORTED, ret;                        \
+      return self->not_writing = 1, errno = ECONNABORTED, ret; \
     }                                                          \
-    else if (self->frozen)                                     \
+    if (self->frozen || (self->capacity == 0 /* unbuffered */ && self->not_reading)) \
     {                                                          \
       BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
       return ret;                                              \
     }                                                          \
-    else if (!QUEUE_IS_FULL (self->queue))                     \
+    if (!QUEUE_IS_FULL (self->queue))                          \
     {                                                          \
       QUEUE_PUSH_##TYPE (&self->queue, message);               \
       BOTTLE_ASSERT (cnd_signal (&self->not_empty) == thrd_success); \
+      if (self->capacity == 0 /* unbuffered */ && !self->not_reading)\
+      {                                                        \
+        /* The thread declares it is attempting to write */    \
+        self->not_writing = 0;                                 \
+        BOTTLE_ASSERT (cnd_signal (&self->writing) == thrd_success); \
+        self->not_reading = 1;                                 \
+        /* Wait for the receiving (reading) thread to get the message */ \
+        while (QUEUE_IS_FULL (self->queue))                    \
+          BOTTLE_ASSERT (cnd_wait (&self->not_full, &self->mutex) == thrd_success); \
+      }                                                        \
       ret = 1;                                                 \
     }                                                          \
     BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
@@ -298,7 +291,7 @@
          at which point both threads continue execution. */    \
       while (!self->closed && self->not_writing)               \
         BOTTLE_ASSERT (cnd_wait (&self->writing, &self->mutex) == thrd_success); \
-      self->not_writing = 1;                                   \
+      self->not_writing = 1; /* The reader declares the end of writing (at once to avoid reading twice) */ \
     }                                                          \
     while (!self->closed && QUEUE_IS_EMPTY (self->queue))      \
       BOTTLE_ASSERT (cnd_wait (&self->not_empty, &self->mutex) == thrd_success); \
@@ -309,7 +302,7 @@
       ret = 1;                                                 \
     }                                                          \
     else if (self->closed)                                     \
-      errno = ECONNABORTED;                                    \
+      self->not_reading = 1, errno = ECONNABORTED;             \
     else                                                       \
       BOTTLE_ASSERT3 (0, "Unexpected.\n", 1);                  \
     BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
@@ -320,10 +313,24 @@
   {                                                            \
     int ret = 0;                                               \
     BOTTLE_ASSERT (mtx_lock (&self->mutex) == thrd_success);   \
-    if (self->capacity == 0) /* unbuffered */                  \
+    if (self->closed && QUEUE_IS_EMPTY (self->queue))          \
     {                                                          \
       BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
-      return errno = ENOTSUP, ret;                             \
+      return self->not_reading = 1, errno = ECONNABORTED, ret; \
+    }                                                          \
+    if (self->capacity == 0 /* unbuffered */ && self->not_writing) \
+    {                                                          \
+      BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
+      return ret;                                              \
+    }                                                          \
+    if (self->capacity == 0 /* unbuffered */ && !self->not_writing) \
+    {                                                          \
+      /* The thread declares it is attempting to read */       \
+      self->not_reading = 0;                                   \
+      BOTTLE_ASSERT (cnd_signal (&self->reading) == thrd_success); \
+      while (!self->closed && QUEUE_IS_EMPTY (self->queue))    \
+        BOTTLE_ASSERT (cnd_wait (&self->not_empty, &self->mutex) == thrd_success); \
+      self->not_writing = 1;                                   \
     }                                                          \
     if (!QUEUE_IS_EMPTY (self->queue))                         \
     {                                                          \
@@ -332,11 +339,13 @@
       ret = 1;                                                 \
     }                                                          \
     else if (self->closed)                                     \
-      errno = ECONNABORTED;                                    \
+    {                                                          \
+      BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
+      return self->not_reading = 1, errno = ECONNABORTED, ret; \
+    }                                                          \
     BOTTLE_ASSERT (mtx_unlock (&self->mutex) == thrd_success); \
     return ret;                                                \
   }                                                            \
-\
 \
   static void BOTTLE_PLUG_##TYPE (BOTTLE_##TYPE *self)         \
   {                                                            \

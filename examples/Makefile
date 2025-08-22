@@ -10,6 +10,8 @@ all: build
 build: bottle_auto_var bottle_perf bottle_fifo_example bottle_example bottle_simple_example bottle_token_example hanoi semaphore
 	@echo "Type 'make run' to execute."
 
+bottle_auto_var bottle_perf bottle_fifo_example bottle_example bottle_simple_example bottle_token_example hanoi semaphore: ../bottle.h ../bottle_impl.h
+
 .PHONY: run
 run: build
 	./bottle_auto_var
