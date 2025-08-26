@@ -64,6 +64,7 @@ read_apply_write (void *arg)
 static void *
 read_apply_write_try (void *arg)
 {
+#define GO_TO_THE_BAR_FOR_A_WHILE do { nanosleep (&(struct timespec){ 0, 1000 }, 0); } while (0)
   int v;
   bottle_t (int) * bottle = arg;
   errno = 0;
@@ -71,12 +72,10 @@ read_apply_write_try (void *arg)
   {
     int ret;
     while (!(ret = bottle_try_recv (bottle, &v)) && !errno)
-      nanosleep (&(struct timespec)
-                 { 0, 1000 }, 0);
+      GO_TO_THE_BAR_FOR_A_WHILE;
     if (ret)
       while (!(ret = bottle_try_send (bottle, APPLY (v))) && !errno)
-        nanosleep (&(struct timespec)
-                   { 0, 1000 }, 0);
+        GO_TO_THE_BAR_FOR_A_WHILE;
   }
   return 0;
 }
